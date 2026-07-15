@@ -50,18 +50,17 @@ class Particle3D {
     targetZ = this.destZ * depthFactor;
 
     // ---- APPLY LIVE EXPRESSIONS ----
-    // Smooth Gaussian influence function: returns 0..1 based on distance from a point.
-    // sigma controls the spread radius. Larger sigma = wider, softer influence.
-    const gauss = (px, py, cx, cy, sigma) => {
+    // Smooth Elliptical Gaussian influence function for perfect organic blending
+    // Using independent X and Y sigmas allows wide features (mouth/jaw) to stretch naturally without tearing
+    const gauss = (px, py, cx, cy, sigmaX, sigmaY = sigmaX) => {
       const dx = px - cx;
       const dy = py - cy;
-      return Math.exp(-(dx * dx + dy * dy) / (2 * sigma * sigma));
+      return Math.exp(-(dx * dx) / (2 * sigmaX * sigmaX) - (dy * dy) / (2 * sigmaY * sigmaY));
     };
 
     const faceW = Engine.faceWidth || 300;
     const faceH = Engine.faceHeight || 300;
     const faceCenterX = Engine.faceLeft !== undefined ? (Engine.faceLeft + faceW / 2) : 0;
-    const faceCenterY = Engine.faceTop !== undefined ? (Engine.faceTop + faceH / 2) : 0;
 
     const eyeY = Engine.eyeY !== undefined ? Engine.eyeY : -faceH * 0.12;
     const leftEyeX = Engine.leftEyeX !== undefined ? Engine.leftEyeX : -faceW * 0.18;
@@ -73,167 +72,159 @@ class Particle3D {
     const mouthW = Engine.mouthW !== undefined ? Engine.mouthW : faceW * 0.22;
     const mouthH = Engine.mouthH !== undefined ? Engine.mouthH : faceH * 0.08;
 
-    // Useful derived sizes for Gaussian sigmas
-    const eyeSigma = eyeRad * 1.8;        // influence zone around each eye
-    const browSigma = faceW * 0.18;       // influence zone for eyebrow region
-    const mouthSigmaX = mouthW * 1.5;     // horizontal mouth influence
-    const mouthSigmaY = mouthH * 2.5;     // vertical mouth influence (taller for jaw)
-    const cheekSigma = faceW * 0.25;       // cheek puff zone
-    const mouthCenterX = faceCenterX;      // mouth horizontal center
+    // Advanced anatomical sizing for organic falloff
+    const eyeSigmaX = eyeRad * 1.6;
+    const eyeSigmaY = eyeRad * 1.2;
+    const browSigmaX = faceW * 0.15;
+    const browSigmaY = faceH * 0.10;
+    const mouthSigmaX = mouthW * 1.1; 
+    const mouthSigmaY = mouthH * 1.3;
+    const jawSigmaX = faceW * 0.35;
+    const jawSigmaY = faceH * 0.20;
+    const cheekSigma = faceW * 0.20;
+    const mouthCenterX = faceCenterX;
 
     // Particle position relative to face center
     const px = this.destX;
     const py = this.destY;
 
     if (activeExpression === 'breathe') {
-      // Gentle, lifelike breathing — subtle chest/face expansion
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.015) * 10;
       targetX += Math.cos(time + this.destY * 0.01) * 3;
 
     } else if (activeExpression === 'smile') {
-      // --- MOUTH: Corners curve upward, center stays ---
-      const mouthInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX * 1.3);
-      const cornerBias = Math.max(-1, Math.min(1, (px - mouthCenterX) / (mouthW || 1))); // -1..1 clamped
-      // Corners lift more than center (parabolic curve) — stronger magnitude
+      // Mouth corners curve up
+      const mouthInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX, mouthSigmaY);
+      const cornerBias = Math.max(-1, Math.min(1, (px - mouthCenterX) / (mouthW || 1)));
       const lift = -cornerBias * cornerBias * faceH * 0.10 * mouthInf;
-      // Horizontal stretch at corners
       const stretch = cornerBias * faceW * 0.04 * mouthInf;
       targetY += lift;
       targetX += stretch;
 
-      // --- CHEEKS: Puff outward in 3D ---
+      // Cheeks puff outward and slightly up
       const leftCheekX = leftEyeX;
       const rightCheekX = rightEyeX;
       const cheekY = mouthY - faceH * 0.1;
-      const leftCheek = gauss(px, py, leftCheekX, cheekY, cheekSigma * 1.3);
-      const rightCheek = gauss(px, py, rightCheekX, cheekY, cheekSigma * 1.3);
+      const leftCheek = gauss(px, py, leftCheekX, cheekY, cheekSigma);
+      const rightCheek = gauss(px, py, rightCheekX, cheekY, cheekSigma);
       targetZ += (leftCheek + rightCheek) * 14;
-      // Cheeks push up slightly
       targetY -= (leftCheek + rightCheek) * faceH * 0.025;
 
-      // --- EYES: Slight squint (lower lid pushes up) ---
-      const leftEyeInf = gauss(px, py, leftEyeX, eyeY + eyeRad * 0.5, eyeSigma * 0.7);
-      const rightEyeInf = gauss(px, py, rightEyeX, eyeY + eyeRad * 0.5, eyeSigma * 0.7);
+      // Lower eyelids push up (squint)
+      const leftEyeInf = gauss(px, py, leftEyeX, eyeY + eyeRad * 0.6, eyeSigmaX, eyeSigmaY * 0.8);
+      const rightEyeInf = gauss(px, py, rightEyeX, eyeY + eyeRad * 0.6, eyeSigmaX, eyeSigmaY * 0.8);
       targetY -= (leftEyeInf + rightEyeInf) * faceH * 0.02;
 
-      // Subtle breathing overlay
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
 
     } else if (activeExpression === 'wink') {
-      // --- RIGHT EYE: Close by collapsing toward center line ---
-      const rightEyeInf = gauss(px, py, rightEyeX, eyeY, eyeSigma * 1.2);
-      const dyFromEye = py - eyeY;
-      // Squeeze toward eye center line (dy -> 0) — strong closure
-      targetY -= dyFromEye * 0.92 * rightEyeInf;
-      targetZ -= 8 * rightEyeInf; // push lid inward
+      // Right eye closes strongly
+      const rightUpperLid = gauss(px, py, rightEyeX, eyeY - eyeRad * 0.3, eyeSigmaX, eyeSigmaY * 0.6);
+      const rightLowerLid = gauss(px, py, rightEyeX, eyeY + eyeRad * 0.3, eyeSigmaX, eyeSigmaY * 0.6);
+      targetY += rightUpperLid * faceH * 0.035;
+      targetY -= rightLowerLid * faceH * 0.035;
+      targetZ -= (rightUpperLid + rightLowerLid) * 8; // Push lids inward
 
-      // --- LEFT EYE: stays open, maybe slight raise ---
-      const leftEyeInf = gauss(px, py, leftEyeX, eyeY, eyeSigma * 0.6);
-      targetY -= leftEyeInf * faceH * 0.005; // tiny widening
+      // Left eye slightly widens
+      const leftUpperLid = gauss(px, py, leftEyeX, eyeY - eyeRad * 0.3, eyeSigmaX, eyeSigmaY * 0.6);
+      targetY -= leftUpperLid * faceH * 0.008;
 
-      // --- RIGHT EYEBROW: Slight raise ---
-      const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigma);
+      // Right eyebrow raises
+      const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigmaX, browSigmaY);
       targetY -= rightBrowInf * faceH * 0.015;
 
-      // --- MOUTH: Slight smirk on right side ---
-      const smirkInf = gauss(px, py, mouthCenterX + mouthW * 0.4, mouthY, mouthSigmaX * 0.6);
+      // Right mouth corner smirks
+      const smirkInf = gauss(px, py, mouthCenterX + mouthW * 0.5, mouthY, mouthSigmaX * 0.6, mouthSigmaY * 0.8);
       targetY -= smirkInf * faceH * 0.035;
 
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
 
     } else if (activeExpression === 'surprise') {
-      // --- MOUTH: Open wide (jaw drops down, upper lip stays) ---
-      const mouthInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX);
-      const aboveMouth = py < mouthY;
-      if (aboveMouth) {
-        // Upper lip: slight upward
-        targetY -= mouthInf * faceH * 0.015;
-      } else {
-        // Lower jaw: drops significantly — big drop
-        targetY += mouthInf * faceH * 0.10;
-        // Jaw comes forward in 3D
-        targetZ += mouthInf * 8;
-      }
-      // Mouth narrows horizontally into an "O" shape
-      const mouthDx = px - mouthCenterX;
-      targetX -= mouthDx * 0.25 * mouthInf;
+      // Separate upper lip and lower jaw entirely to avoid tearing
+      const upperLipY = mouthY - mouthH * 0.3;
+      const lowerJawY = mouthY + mouthH * 0.8;
+      
+      const upperLipInf = gauss(px, py, mouthCenterX, upperLipY, mouthSigmaX, mouthSigmaY * 0.8);
+      const lowerJawInf = gauss(px, py, mouthCenterX, lowerJawY, jawSigmaX, jawSigmaY);
 
-      // --- EYEBROWS: Raise both high ---
-      const leftBrowInf = gauss(px, py, leftEyeX, eyebrowY, browSigma);
-      const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigma);
+      targetY -= upperLipInf * faceH * 0.015;
+      targetY += lowerJawInf * faceH * 0.10; // Huge jaw drop
+      targetZ += lowerJawInf * 8; // Jaw forward
+
+      // Mouth narrows into "O"
+      const mouthDx = px - mouthCenterX;
+      const mouthAreaInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX, mouthSigmaY * 1.5);
+      targetX -= mouthDx * 0.25 * mouthAreaInf;
+
+      // Both eyebrows raise high
+      const leftBrowInf = gauss(px, py, leftEyeX, eyebrowY, browSigmaX, browSigmaY);
+      const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigmaX, browSigmaY);
       targetY -= (leftBrowInf + rightBrowInf) * faceH * 0.07;
 
-      // --- EYES: Widen (upper lid goes up) ---
-      const leftEyeTop = gauss(px, py, leftEyeX, eyeY - eyeRad * 0.4, eyeSigma * 0.7);
-      const rightEyeTop = gauss(px, py, rightEyeX, eyeY - eyeRad * 0.4, eyeSigma * 0.7);
+      // Upper eyelids raise
+      const leftEyeTop = gauss(px, py, leftEyeX, eyeY - eyeRad * 0.4, eyeSigmaX, eyeSigmaY * 0.7);
+      const rightEyeTop = gauss(px, py, rightEyeX, eyeY - eyeRad * 0.4, eyeSigmaX, eyeSigmaY * 0.7);
       targetY -= (leftEyeTop + rightEyeTop) * faceH * 0.025;
 
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
 
     } else if (activeExpression === 'angry') {
-      // --- EYEBROWS: Pull down and together (furrow) ---
-      const leftBrowInf = gauss(px, py, leftEyeX, eyebrowY, browSigma);
-      const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigma);
-      // Pull down — strong furrow
+      // Furrow brows down and inward
+      const leftBrowInf = gauss(px, py, leftEyeX, eyebrowY, browSigmaX, browSigmaY);
+      const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigmaX, browSigmaY);
       targetY += (leftBrowInf + rightBrowInf) * faceH * 0.055;
-      // Pull inward (toward nose bridge)
       const browDx = px - faceCenterX;
       targetX -= browDx * 0.14 * (leftBrowInf + rightBrowInf);
 
-      // --- EYES: Narrow/squint ---
-      const leftEyeInf = gauss(px, py, leftEyeX, eyeY, eyeSigma * 0.8);
-      const rightEyeInf = gauss(px, py, rightEyeX, eyeY, eyeSigma * 0.8);
-      const dyFromEye = py - eyeY;
-      // Top of eye comes down, bottom comes up
-      if (dyFromEye < 0) {
-        targetY += leftEyeInf * faceH * 0.01;
-        targetY += rightEyeInf * faceH * 0.01;
-      } else {
-        targetY -= leftEyeInf * faceH * 0.008;
-        targetY -= rightEyeInf * faceH * 0.008;
-      }
+      // Squint eyes (upper lid down, lower lid up)
+      const leftUpperLid = gauss(px, py, leftEyeX, eyeY - eyeRad * 0.3, eyeSigmaX, eyeSigmaY * 0.6);
+      const rightUpperLid = gauss(px, py, rightEyeX, eyeY - eyeRad * 0.3, eyeSigmaX, eyeSigmaY * 0.6);
+      const leftLowerLid = gauss(px, py, leftEyeX, eyeY + eyeRad * 0.3, eyeSigmaX, eyeSigmaY * 0.6);
+      const rightLowerLid = gauss(px, py, rightEyeX, eyeY + eyeRad * 0.3, eyeSigmaX, eyeSigmaY * 0.6);
 
-      // --- MOUTH: Tighten/compress (thin lips pressed together) ---
-      const mouthInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX * 0.8);
-      const dyMouth = py - mouthY;
-      targetY -= dyMouth * 0.25 * mouthInf; // compress vertically
+      targetY += (leftUpperLid + rightUpperLid) * faceH * 0.012;
+      targetY -= (leftLowerLid + rightLowerLid) * faceH * 0.012;
 
-      // --- NOSE: Wrinkle (push forward) ---
+      // Compress mouth vertically
+      const upperLipInf = gauss(px, py, mouthCenterX, mouthY - mouthH * 0.3, mouthSigmaX, mouthSigmaY * 0.6);
+      const lowerLipInf = gauss(px, py, mouthCenterX, mouthY + mouthH * 0.3, mouthSigmaX, mouthSigmaY * 0.6);
+      targetY += upperLipInf * faceH * 0.015;
+      targetY -= lowerLipInf * faceH * 0.015;
+
+      // Nose wrinkle forward
       const noseY = (eyeY + mouthY) / 2;
-      const noseInf = gauss(px, py, faceCenterX, noseY, faceW * 0.12);
+      const noseInf = gauss(px, py, faceCenterX, noseY, faceW * 0.15, faceH * 0.15);
       targetZ += noseInf * 10;
 
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
 
     } else if (activeExpression === 'sad') {
-      // --- MOUTH: Corners droop downward ---
-      const mouthInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX);
-      const cornerBias = (px - mouthCenterX) / (mouthW || 1);
-      // Corners pull down (opposite of smile)
+      // Mouth corners droop
+      const mouthInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX, mouthSigmaY);
+      const cornerBias = Math.max(-1, Math.min(1, (px - mouthCenterX) / (mouthW || 1)));
       const droop = cornerBias * cornerBias * faceH * 0.07 * mouthInf;
       targetY += droop;
 
-      // --- INNER EYEBROWS: Raise (puppy eyes), outer droop ---
-      const leftBrowInf = gauss(px, py, leftEyeX, eyebrowY, browSigma);
-      const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigma);
+      // Puppy dog eyes: inner brows up, outer down
+      const leftBrowInf = gauss(px, py, leftEyeX, eyebrowY, browSigmaX, browSigmaY);
+      const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigmaX, browSigmaY);
       const browInnerBias = 1.0 - Math.min(1, Math.abs(px - faceCenterX) / (faceW * 0.25));
-      // Inner brows go up, outer brows go down
       targetY -= (leftBrowInf + rightBrowInf) * browInnerBias * faceH * 0.05;
       targetY += (leftBrowInf + rightBrowInf) * (1 - browInnerBias) * faceH * 0.02;
 
-      // --- EYES: Slightly narrow (about to cry) ---
-      const leftEyeInf = gauss(px, py, leftEyeX, eyeY + eyeRad * 0.3, eyeSigma * 0.6);
-      const rightEyeInf = gauss(px, py, rightEyeX, eyeY + eyeRad * 0.3, eyeSigma * 0.6);
-      targetY -= (leftEyeInf + rightEyeInf) * faceH * 0.015;
+      // Eyelids slightly close
+      const leftUpperLid = gauss(px, py, leftEyeX, eyeY - eyeRad * 0.3, eyeSigmaX, eyeSigmaY * 0.6);
+      const rightUpperLid = gauss(px, py, rightEyeX, eyeY - eyeRad * 0.3, eyeSigmaX, eyeSigmaY * 0.6);
+      targetY += (leftUpperLid + rightUpperLid) * faceH * 0.015;
 
-      // --- CHIN: Slight tremble / push forward ---
-      const chinY = mouthY + faceH * 0.12;
-      const chinInf = gauss(px, py, faceCenterX, chinY, faceW * 0.18);
+      // Chin trembles and pushes forward
+      const chinY = mouthY + faceH * 0.18;
+      const chinInf = gauss(px, py, faceCenterX, chinY, jawSigmaX, jawSigmaY);
       targetZ += chinInf * 6;
-      targetY += chinInf * Math.sin(time * 8) * faceH * 0.01; // visible tremble
+      targetY += chinInf * Math.sin(time * 8) * faceH * 0.01;
 
       // Lower lip quiver
-      const lowerLipInf = gauss(px, py, mouthCenterX, mouthY + mouthH * 0.3, mouthSigmaX * 0.5);
+      const lowerLipInf = gauss(px, py, mouthCenterX, mouthY + mouthH * 0.3, mouthSigmaX, mouthSigmaY * 0.5);
       targetY += lowerLipInf * Math.sin(time * 6 + 1.5) * faceH * 0.008;
 
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
@@ -253,19 +244,19 @@ class Particle3D {
       targetZ = this.destZ * depthFactor + Math.sin(time * 3 + this.distFromCenter * 0.02) * 15;
     }
 
-    // ---- JAW SPEAK MOVEMENT (also smooth) ----
+    // ---- JAW SPEAK MOVEMENT (Anatomically Smooth) ----
     if (mouthOpenScale > 0) {
-      const speakInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX);
-      const belowMouth = py >= mouthY;
-      if (belowMouth) {
-        // Lower jaw drops
-        targetY += mouthOpenScale * faceH * 0.055 * speakInf;
-        targetZ += mouthOpenScale * 5 * speakInf;
-      } else {
-        // Upper lip slight movement
-        const upperInf = gauss(px, py, mouthCenterX, mouthY - mouthH * 0.5, mouthSigmaX * 0.6);
-        targetY -= mouthOpenScale * faceH * 0.012 * upperInf;
-      }
+      // Define independent upper lip and lower jaw points to prevent tearing
+      const upperLipY = mouthY - mouthH * 0.3;
+      const lowerJawY = mouthY + mouthH * 0.6;
+      
+      const upperLipInf = gauss(px, py, mouthCenterX, upperLipY, mouthSigmaX, mouthSigmaY * 0.6);
+      const lowerJawInf = gauss(px, py, mouthCenterX, lowerJawY, jawSigmaX, jawSigmaY * 1.2);
+
+      targetY -= mouthOpenScale * faceH * 0.012 * upperLipInf;
+      
+      targetY += mouthOpenScale * faceH * 0.055 * lowerJawInf;
+      targetZ += mouthOpenScale * 5 * lowerJawInf;
     }
 
     // Apply spring physics pulling toward active targets
