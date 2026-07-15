@@ -22,15 +22,10 @@
       <canvas id="particleCanvas"></canvas>
       <div id="loadingOverlay" class="loading-overlay">
         <div class="spinner"></div>
-        <p>Scanning neural depth map...</p>
+        <p id="loadingText">Scanning neural depth map...</p>
       </div>
       <div id="instructionHint" class="instruction-hint">
         Move mouse to tilt camera • Click & drag to rotate in 3D • Scroll to zoom
-      </div>
-
-      <div id="detection-status" style="margin-top: 2rem; font-size: 0.85rem; padding: 12px; background: rgba(0,0,0,0.5); border-radius: 8px; border-left: 3px solid #ffcc00; display: flex; flex-direction: column; gap: 4px;">
-        <span style="color: rgba(255,255,255,0.7); text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px;">AI Vision Status</span>
-        <strong id="status-text" style="color: #ffcc00; font-weight: 500;">Loading Models...</strong>
       </div>
     </main>
 
@@ -59,6 +54,24 @@
         </div>
       </section>
 
+      <!-- AI Vision Status -->
+      <div id="detection-status" style="margin: 0 0 1rem 0; font-size: 0.85rem; padding: 12px 16px; background: rgba(0,0,0,0.4); border-radius: 8px; border-left: 3px solid #ffcc00; display: flex; flex-direction: column; gap: 4px;">
+        <span style="color: rgba(255,255,255,0.5); text-transform: uppercase; font-size: 0.65rem; letter-spacing: 1.5px;">AI Face Detection</span>
+        <strong id="status-text" style="color: #ffcc00; font-weight: 500;">Waiting for library...</strong>
+      </div>
+
+      <section class="panel-section">
+        <h2>FOCUS MODE</h2>
+        <div class="btn-grid" style="grid-template-columns: 1fr 1fr;">
+          <button class="expr-btn" id="focusFull" data-focus="full" style="font-size:0.75rem;">
+            <span class="btn-icon">🖼️</span> Full Image
+          </button>
+          <button class="expr-btn active" id="focusFace" data-focus="face" style="font-size:0.75rem;">
+            <span class="btn-icon">👤</span> Face Only
+          </button>
+        </div>
+      </section>
+
       <section class="panel-section expressions-section">
         <h2>2. FACIAL EXPRESSION</h2>
         <div class="btn-grid">
@@ -83,8 +96,26 @@
         </div>
       </section>
 
+      <section class="panel-section">
+        <h2>3. AVATAR GESTURES</h2>
+        <div class="btn-grid">
+          <button class="gesture-btn" data-gesture="nod">
+            <span class="btn-icon">↕️</span> Nod
+          </button>
+          <button class="gesture-btn" data-gesture="shake">
+            <span class="btn-icon">↔️</span> Shake
+          </button>
+          <button class="gesture-btn" data-gesture="tilt">
+            <span class="btn-icon">↩️</span> Tilt
+          </button>
+          <button class="gesture-btn" data-gesture="speak">
+            <span class="btn-icon">🗣️</span> Speak
+          </button>
+        </div>
+      </section>
+
       <section class="panel-section effects-section">
-        <h2>3. CYBER EFFECTS</h2>
+        <h2>4. CYBER EFFECTS</h2>
         <div class="btn-grid">
           <button class="expr-btn" data-expr="glitch">
             <span class="btn-icon">⚡</span> Glitch
@@ -99,7 +130,7 @@
       </section>
 
       <section class="panel-section styling-section">
-        <h2>4. COLOR STYLE</h2>
+        <h2>5. COLOR STYLE</h2>
         <div class="color-presets">
           <button class="color-btn active" data-color="original" title="Original Colors">
             <span class="color-preview original"></span> Original
@@ -120,7 +151,7 @@
       </section>
 
       <section class="panel-section physics-section">
-        <h2>5. ENGINE CONTROLS</h2>
+        <h2>6. ENGINE CONTROLS</h2>
         
         <div class="control-group">
           <div class="control-label">
@@ -172,7 +203,7 @@
       </section>
 
       <section class="panel-section audio-section">
-        <h2>6. AUDIO RESPONSE</h2>
+        <h2>7. AUDIO RESPONSE</h2>
         <div class="audio-toggle-container">
           <label class="switch">
             <input type="checkbox" id="audioReactCheckbox">
@@ -191,7 +222,8 @@
     </aside>
   </div>
 
-  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <!-- face-api.js loaded BEFORE app.js, no defer, so faceapi is available -->
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 // 3D Interactive Particle Portrait Engine
-// Antigravity AI Engine
+// Antigravity AI Engine — face-api.js 68-landmark integration
 
 class Particle3D {
   constructor(x, y, z, r, g, b, size) {
@@ -46,8 +46,7 @@ class Particle3D {
     let targetZ = this.destZ;
 
     // Adjust Z target based on the current depth slider configuration
-    // The scanned z value is pre-normalized, so scale it dynamically
-    const depthFactor = depthStrength / 80; // normalized to default 80
+    const depthFactor = depthStrength / 80;
     targetZ = this.destZ * depthFactor;
 
     // ---- APPLY LIVE EXPRESSIONS ----
@@ -67,35 +66,29 @@ class Particle3D {
     const mouthH = Engine.mouthH !== undefined ? Engine.mouthH : faceH * 0.08;
 
     if (activeExpression === 'breathe') {
-      // Gentle, lifelike breathing motion using sinusoidal offsets
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.015) * 10;
       targetX += Math.cos(time + this.destY * 0.01) * 3;
     } else if (activeExpression === 'smile') {
-      // Smile: Pull corners of mouth upwards and outwards
       const dxMouth = dxFromFaceCenter;
       const dyMouth = this.destY - mouthY;
       if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
-        const xRatio = dxMouth / mouthW; // -1 to 1
-        const lift = -Math.pow(xRatio, 2) * (faceH * 0.065); // curve up
-        const stretch = xRatio * (faceW * 0.03); // pull corners out
+        const xRatio = dxMouth / mouthW;
+        const lift = -Math.pow(xRatio, 2) * (faceH * 0.065);
+        const stretch = xRatio * (faceW * 0.03);
         targetY += lift;
         targetX += stretch;
-        targetZ += Math.abs(xRatio) * 6; // push cheeks out in 3D
+        targetZ += Math.abs(xRatio) * 6;
       }
-      // Gentle breathe overlay
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
     } else if (activeExpression === 'wink') {
-      // Wink: Close the right eye by collapsing it vertically
       const dxEye = this.destX - rightEyeX;
       const dyEye = this.destY - eyeY;
       if (dxEye * dxEye + dyEye * dyEye < eyeRad * eyeRad) {
         targetY = eyeY + dyEye * 0.12;
-        targetZ -= 4; // push eyelid back slightly
+        targetZ -= 4;
       }
-      // Gentle breathe overlay
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
     } else if (activeExpression === 'surprise') {
-      // Surprise: Open mouth (jaw down) and raise eyebrows
       const dxMouth = dxFromFaceCenter;
       const dyMouth = this.destY - mouthY;
       if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
@@ -104,30 +97,24 @@ class Particle3D {
         } else {
           targetY += faceH * 0.07;
         }
-        targetX = faceCenterX + dxMouth * 0.95; // narrow mouth
+        targetX = faceCenterX + dxMouth * 0.95;
       }
-      // Eyebrows up
       if (Math.abs(dxFromFaceCenter) < faceW * 0.35 && this.destY < eyebrowY + 15 && this.destY > eyebrowY - 15) {
         targetY -= faceH * 0.05;
       }
-      // Gentle breathe overlay
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
     } else if (activeExpression === 'angry') {
-      // Angry: Pull eyebrows down and together, tighten mouth
       if (Math.abs(dxFromFaceCenter) < faceW * 0.35 && this.destY < eyebrowY + 15 && this.destY > eyebrowY - 15) {
         targetY += faceH * 0.035;
         targetX += (dxFromFaceCenter > 0 ? -1 : 1) * (faceW * 0.025);
       }
-      // Tight mouth
       const dxMouth = dxFromFaceCenter;
       const dyMouth = this.destY - mouthY;
       if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
         targetY = mouthY + dyMouth * 0.4;
       }
-      // Gentle breathe overlay
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
     } else if (activeExpression === 'sad') {
-      // Sad: Pull mouth corners down, raise inner eyebrows
       const dxMouth = dxFromFaceCenter;
       const dyMouth = this.destY - mouthY;
       if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
@@ -135,16 +122,13 @@ class Particle3D {
         const droop = Math.pow(xRatio, 2) * (faceH * 0.045);
         targetY += droop;
       }
-      // Inner eyebrows up, outer eyebrows down
       if (Math.abs(dxFromFaceCenter) < faceW * 0.35 && this.destY < eyebrowY + 15 && this.destY > eyebrowY - 15) {
         const xRatio = Math.abs(dxFromFaceCenter) / (faceW * 0.35);
         const lift = (1 - xRatio) * (faceH * 0.035) - xRatio * (faceH * 0.01);
         targetY -= lift;
       }
-      // Gentle breathe overlay
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
     } else if (activeExpression === 'glitch') {
-      // Electronic digital glitching (horizontal jumps and color splits)
       if (Math.random() < 0.005) {
         this.x += (Math.random() - 0.5) * 30;
       }
@@ -152,7 +136,6 @@ class Particle3D {
         this.z += (Math.random() - 0.5) * 40;
       }
     } else if (activeExpression === 'vortex') {
-      // Orbiting around Z-axis forming a 3D cyclone
       const orbitRadius = Math.max(10, this.distFromCenter);
       const angle = time * 1.5 + this.distFromCenter * 0.005;
       targetX = Math.cos(angle) * orbitRadius;
@@ -166,11 +149,9 @@ class Particle3D {
       const dyMouth = this.destY - mouthY;
       if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
         if (this.destY >= mouthY) {
-          // Lower jaw/lip goes down
           targetY += mouthOpenScale * (faceH * 0.06);
-          targetZ += mouthOpenScale * 4; // jut jaw slightly forward
+          targetZ += mouthOpenScale * 4;
         } else {
-          // Upper lip moves up slightly
           targetY -= mouthOpenScale * (faceH * 0.015);
         }
       }
@@ -194,22 +175,19 @@ class Particle3D {
 
       if (distSq < radSq) {
         const dist = Math.sqrt(distSq);
-        const force = (mouseRadius - dist) / mouseRadius; // 0 to 1
+        const force = (mouseRadius - dist) / mouseRadius;
 
         if (mouseMode === 'repel') {
-          // Push particles away (Z goes forwards, X & Y push out)
           const angle = Math.atan2(dy, dx);
           this.vx += Math.cos(angle) * force * 6;
           this.vy += Math.sin(angle) * force * 6;
-          this.vz += force * 12; // push forward in 3D depth
+          this.vz += force * 12;
         } else if (mouseMode === 'attract') {
-          // Pull particles in
           const angle = Math.atan2(dy, dx);
           this.vx -= Math.cos(angle) * force * 5;
           this.vy -= Math.sin(angle) * force * 5;
           this.vz -= force * 10;
         } else if (mouseMode === 'swirl') {
-          // Tangential swirl force
           const angle = Math.atan2(dy, dx) + Math.PI / 2;
           this.vx += Math.cos(angle) * force * 6;
           this.vy += Math.sin(angle) * force * 6;
@@ -219,7 +197,6 @@ class Particle3D {
 
     // ---- AUDIO REACTIVITY ----
     if (audioScale > 0) {
-      // Microphone frequencies drive turbulence and slight size scaling
       const noise = (Math.random() - 0.5) * audioScale * 30;
       this.vx += (Math.random() - 0.5) * audioScale * 2;
       this.vy += (Math.random() - 0.5) * audioScale * 2;
@@ -238,45 +215,35 @@ class Particle3D {
 
   // Calculate projected 3D to 2D screen coordinates
   project(yaw, pitch, roll, zoom, focalLength, width, height) {
-    // 3D rotation matrix around Z (roll)
     const cosR = Math.cos(roll);
     const sinR = Math.sin(roll);
     let rx = this.x * cosR - this.y * sinR;
     let ry = this.x * sinR + this.y * cosR;
 
-    // 3D rotation matrix around Y (yaw)
     const cosY = Math.cos(yaw);
     const sinY = Math.sin(yaw);
     let x1 = rx * cosY - this.z * sinY;
     let z1 = rx * sinY + this.z * cosY;
 
-    // 3D rotation matrix around X (pitch)
     const cosX = Math.cos(pitch);
     const sinX = Math.sin(pitch);
     let y2 = ry * cosX - z1 * sinX;
     let z2 = ry * sinX + z1 * cosX;
 
-    // Perspective scale calculation
     const perspectiveScale = focalLength / (focalLength + z2);
     
-    // Final 2D Screen projection
     this.screenX = width / 2 + x1 * perspectiveScale * zoom;
     this.screenY = height / 2 + y2 * perspectiveScale * zoom;
     
-    // Depth Cueing (Z-Sorting depth)
     this.projZ = z2; 
-    
-    // Scale size and opacity based on Z depth
     this.projSize = Math.max(0.1, this.size * perspectiveScale * zoom);
     
-    // Depth fog: particles far away are darker, close ones are bright
     const fogStart = -200;
     const fogEnd = 300;
     let alpha = 1 - (z2 - fogStart) / (fogEnd - fogStart);
     this.projAlpha = Math.max(0.15, Math.min(1, alpha));
   }
 
-  // Linear color interpolation
   lerpColor(r, g, b, speed) {
     this.r += (r - this.r) * speed;
     this.g += (g - this.g) * speed;
@@ -300,6 +267,7 @@ const Engine = {
   colorTheme: 'original',
   activeExpression: 'breathe',
   audioReact: false,
+  focusMode: 'face', // 'face' or 'full'
   
   // Camera variables
   yaw: 0,
@@ -329,7 +297,22 @@ const Engine = {
   dataArray: null,
   audioScale: 0,
 
+  // Face detection state
   modelsLoaded: false,
+  cachedDetection: null,
+  cachedFaceCanvas: null,
+
+  setStatus(text, color) {
+    const el = document.getElementById('status-text');
+    if (el) {
+      el.innerText = text;
+      el.style.color = color || '#ffcc00';
+    }
+    const border = document.getElementById('detection-status');
+    if (border) {
+      border.style.borderLeftColor = color || '#ffcc00';
+    }
+  },
 
   async init() {
     this.canvas = document.getElementById('particleCanvas');
@@ -339,27 +322,23 @@ const Engine = {
     this.setupEventListeners();
     this.setupControlsUI();
     
-    try {
-      console.log("Loading face-api.js models from jsDelivr/GitHub...");
-      const statusText = document.getElementById('status-text');
-      if (statusText) statusText.innerText = 'Loading AI Models...';
-      
-      await faceapi.nets.ssdMobilenetv1.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
-      await faceapi.nets.faceLandmark68Net.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
-      this.modelsLoaded = true;
-      console.log("Face-api models loaded!");
-      
-      if (statusText) {
-        statusText.innerText = 'Ready';
-        statusText.style.color = '#00ffcc';
+    // Load face-api.js models
+    if (typeof faceapi !== 'undefined') {
+      try {
+        this.setStatus('Loading AI Models...', '#ffcc00');
+        const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+        await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        this.modelsLoaded = true;
+        console.log("face-api.js models loaded successfully!");
+        this.setStatus('AI Ready ✓', '#00ffcc');
+      } catch (e) {
+        console.warn("Could not load face-api models:", e);
+        this.setStatus('Model Load Failed ✗', '#ff4444');
       }
-    } catch (e) {
-      console.warn("Could not load face-api models", e);
-      const statusText = document.getElementById('status-text');
-      if (statusText) {
-        statusText.innerText = 'Model Load Failed';
-        statusText.style.color = '#ff4444';
-      }
+    } else {
+      console.warn("face-api.js library not found on window");
+      this.setStatus('Library Missing ✗', '#ff4444');
     }
 
     // Load default demo portrait
@@ -371,145 +350,160 @@ const Engine = {
     this.canvas.width = this.canvas.parentElement.clientWidth * dpr;
     this.canvas.height = this.canvas.parentElement.clientHeight * dpr;
     this.ctx.scale(dpr, dpr);
-    
-    // Adjust mouse interaction radius relative to size
     this.mouseRadius = Math.min(this.canvas.width, this.canvas.height) / (6 * dpr);
+  },
+
+  /**
+   * Creates a canvas element from an image source for face-api.js processing.
+   * face-api.js works most reliably with canvas elements, not raw Image objects.
+   */
+  imageToCanvas(img) {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth || img.width;
+    c.height = img.naturalHeight || img.height;
+    c.getContext('2d').drawImage(img, 0, 0);
+    return c;
   },
 
   loadImage(src) {
     document.getElementById('loadingOverlay').classList.remove('hidden');
-    const statusText = document.getElementById('status-text');
+    const loadingText = document.getElementById('loadingText');
     
     const img = new Image();
-    // Prevent CORS errors on data: URLs
-    if (src.startsWith('http')) {
-      img.crossOrigin = "anonymous";
-    }
+    img.crossOrigin = "anonymous";
     
     img.onload = async () => {
       this.loadedImage = img;
       
-      if (this.modelsLoaded && typeof faceapi !== 'undefined') {
+      if (this.modelsLoaded) {
         try {
-          if (statusText) {
-            statusText.innerText = 'Scanning Face...';
-            statusText.style.color = '#ffaa00';
-          }
-          // Detect face and 68 landmarks using SSD Mobilenet v1 for high accuracy
-          const detection = await faceapi.detectSingleFace(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.2 })).withFaceLandmarks();
+          if (loadingText) loadingText.textContent = 'AI scanning for face...';
+          this.setStatus('Scanning...', '#ffaa00');
+          
+          // CRITICAL: Draw image to canvas first — face-api works reliably with canvas, 
+          // not raw <img> tags, especially for data: URLs from FileReader
+          const inputCanvas = this.imageToCanvas(img);
+          
+          const detection = await faceapi
+            .detectSingleFace(inputCanvas, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.15 }))
+            .withFaceLandmarks();
+          
           if (detection) {
-            console.log("Face and 68 landmarks detected!", detection);
-            if (statusText) {
-              statusText.innerText = 'Face Detected!';
-              statusText.style.color = '#00ff00';
-            }
-            this.scanImage(detection);
+            console.log("Face detected with 68 landmarks!", detection);
+            this.cachedDetection = detection;
+            this.setStatus('Face Locked ✓', '#00ff00');
           } else {
-            console.log("No face detected by face-api, using fallback centered box.");
-            if (statusText) {
-              statusText.innerText = 'No Face Found (Fallback)';
-              statusText.style.color = '#ff4444';
-            }
-            this.scanImage(null);
+            console.log("No face detected, using centered fallback.");
+            this.cachedDetection = null;
+            this.setStatus('No Face Found (Fallback)', '#ff6644');
           }
         } catch (e) {
-          console.warn("Face-api detection failed.", e);
-          if (statusText) {
-            statusText.innerText = 'Detection Error (Fallback)';
-            statusText.style.color = '#ff4444';
-          }
-          this.scanImage(null);
+          console.warn("Face detection error:", e);
+          this.cachedDetection = null;
+          this.setStatus('Detection Error (Fallback)', '#ff4444');
         }
       } else {
-        console.log("Models not loaded, using fallback.");
-        if (statusText && !this.modelsLoaded) {
-          statusText.innerText = 'Models Offline (Fallback)';
-          statusText.style.color = '#ff4444';
-        }
-        this.scanImage(null);
+        this.cachedDetection = null;
+        this.setStatus('Models Not Ready', '#ff4444');
       }
+      
+      this.scanImage();
       document.getElementById('loadingOverlay').classList.add('hidden');
+      if (loadingText) loadingText.textContent = 'Scanning neural depth map...';
     };
+    
     img.onerror = () => {
       console.warn("Could not load image, building procedural face outline.");
       this.generateFallbackPattern();
       document.getElementById('loadingOverlay').classList.add('hidden');
     };
+    
     img.src = src;
   },
 
-  scanImage(detection) {
+  /**
+   * Core scanning pipeline: reads pixel data from image, maps face landmarks,
+   * and generates the 3D particle field.
+   */
+  scanImage() {
     if (!this.loadedImage) return;
 
-    // Cache detection on the Engine for resizing or parameter changes
-    if (detection !== undefined) {
-      this.cachedDetection = detection;
-    } else {
-      detection = this.cachedDetection || null;
+    const detection = this.cachedDetection;
+    const img = this.loadedImage;
+
+    // Determine crop region
+    let cropX = 0, cropY = 0, cropW = img.width, cropH = img.height;
+
+    if (detection && this.focusMode === 'face') {
+      // Crop to face region with generous padding
+      const box = detection.detection.box;
+      const padX = box.width * 0.6;
+      const padY = box.height * 0.5;
+      cropX = Math.max(0, Math.round(box.x - padX));
+      cropY = Math.max(0, Math.round(box.y - padY));
+      cropW = Math.min(img.width - cropX, Math.round(box.width + padX * 2));
+      cropH = Math.min(img.height - cropY, Math.round(box.height + padY * 2));
     }
 
     // Create a temporary thumbnail canvas to downsample pixel grid
     const tempCanvas = document.createElement('canvas');
     const tempCtx = tempCanvas.getContext('2d');
     
-    // Scale image down so we read roughly the targeted number of pixels
-    const aspect = this.loadedImage.width / this.loadedImage.height;
+    const aspect = cropW / cropH;
     const tempHeight = Math.round(Math.sqrt(this.particleCount / aspect));
     const tempWidth = Math.round(tempHeight * aspect);
     
     tempCanvas.width = tempWidth;
     tempCanvas.height = tempHeight;
     
-    // Draw image onto thumbnail canvas
-    tempCtx.drawImage(this.loadedImage, 0, 0, tempWidth, tempHeight);
+    // Draw cropped region onto thumbnail canvas
+    tempCtx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, tempWidth, tempHeight);
     
     const imgData = tempCtx.getImageData(0, 0, tempWidth, tempHeight);
     const data = imgData.data;
     
     const newTargets = [];
     
-    // Compute pixel scale to draw particles at correct proportion
+    // Compute pixel scale
     const scale = Math.min(
       (this.canvas.width / (window.devicePixelRatio || 1)) * 0.55 / tempWidth,
       (this.canvas.height / (window.devicePixelRatio || 1)) * 0.55 / tempHeight
     );
 
-    // Compute Face Landmarks positioning in particle coordinates
     const partW = tempWidth * scale;
     const partH = tempHeight * scale;
 
     if (detection) {
-      // Map bounding box
       const box = detection.detection.box;
-      const origW = this.loadedImage.width;
-      const origH = this.loadedImage.height;
+      const origW = img.width;
+      const origH = img.height;
 
-      this.faceWidth = (box.width / origW) * partW;
-      this.faceHeight = (box.height / origH) * partH;
-      this.faceLeft = (box.x / origW - 0.5) * partW;
-      this.faceTop = (box.y / origH - 0.5) * partH;
+      // Map face box from original image coords into particle coords
+      // accounting for the crop offset
+      this.faceWidth = (box.width / cropW) * partW;
+      this.faceHeight = (box.height / cropH) * partH;
+      this.faceLeft = ((box.x - cropX) / cropW - 0.5) * partW;
+      this.faceTop = ((box.y - cropY) / cropH - 0.5) * partH;
       this.hasFaceDetected = true;
 
-      // Helper to map a 68-point landmark point to particle coordinates
-      const mapPoint = (p) => {
-        return {
-          x: (p.x / origW - 0.5) * partW,
-          y: (p.y / origH - 0.5) * partH
-        };
-      };
+      // Helper to map a 68-point landmark to particle coordinates
+      const mapPoint = (p) => ({
+        x: ((p.x - cropX) / cropW - 0.5) * partW,
+        y: ((p.y - cropY) / cropH - 0.5) * partH
+      });
       
       const landmarks = detection.landmarks.positions;
       
-      // Calculate averages of key facial feature clusters
       const getAvg = (indices) => {
-        let x = 0, y = 0;
+        let sx = 0, sy = 0;
         indices.forEach(i => {
           const pt = mapPoint(landmarks[i]);
-          x += pt.x; y += pt.y;
+          sx += pt.x; sy += pt.y;
         });
-        return { x: x / indices.length, y: y / indices.length };
+        return { x: sx / indices.length, y: sy / indices.length };
       };
 
+      // 68-point landmark clusters
       const leftEye = getAvg([36, 37, 38, 39, 40, 41]);
       const rightEye = getAvg([42, 43, 44, 45, 46, 47]);
       const leftEyebrow = getAvg([17, 18, 19, 20, 21]);
@@ -524,14 +518,18 @@ const Engine = {
 
       this.mouthY = mouth.y;
       
-      // Compute mouth width and height dynamically based on landmarks
       const mouthLeft = mapPoint(landmarks[48]).x;
       const mouthRight = mapPoint(landmarks[54]).x;
       const mouthTop = mapPoint(landmarks[51]).y;
       const mouthBottom = mapPoint(landmarks[57]).y;
       
-      this.mouthW = Math.max((mouthRight - mouthLeft) * 1.1, this.faceWidth * 0.15);
-      this.mouthH = Math.max((mouthBottom - mouthTop) * 1.3, this.faceHeight * 0.08);
+      this.mouthW = Math.max((mouthRight - mouthLeft) * 1.2, this.faceWidth * 0.15);
+      this.mouthH = Math.max((mouthBottom - mouthTop) * 1.5, this.faceHeight * 0.08);
+
+      console.log("Landmark mapping complete:", {
+        leftEye, rightEye, mouth,
+        faceWidth: this.faceWidth, faceHeight: this.faceHeight
+      });
 
     } else {
       // Fallback centered bounding box
@@ -541,7 +539,6 @@ const Engine = {
       this.faceTop = -this.faceHeight / 2;
       this.hasFaceDetected = false;
 
-      // Fallback relative coordinates
       this.eyeY = this.faceTop + this.faceHeight * 0.38;
       this.leftEyeX = this.faceLeft + this.faceWidth * 0.31;
       this.rightEyeX = this.faceLeft + this.faceWidth * 0.69;
@@ -552,62 +549,53 @@ const Engine = {
       this.mouthH = this.faceHeight * 0.11;
     }
 
+    // Build particle target positions from pixel data
     for (let y = 0; y < tempHeight; y++) {
       for (let x = 0; x < tempWidth; x++) {
         const idx = (y * tempWidth + x) * 4;
         const alpha = data[idx + 3];
         
-        // Skip fully transparent pixels
         if (alpha < 50) continue;
         
         const r = data[idx];
         const g = data[idx + 1];
         const b = data[idx + 2];
         
-        // Grayscale brightness representation for depth displacement
         const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
         
-        // Center coordinates around (0, 0, 0)
         const posX = (x - tempWidth / 2) * scale;
         const posY = (y - tempHeight / 2) * scale;
         
-        // Calculate normalized distance from center (from 0 to 1) for spherical bulge
-        // Bulge relative to face bounding box if detected, otherwise default center
-        let normX = 0;
-        let normY = 0;
+        // Spherical bulge centered on face
+        let normX = 0, normY = 0;
         if (detection) {
-          const faceCenterX = this.faceLeft + this.faceWidth / 2;
-          const faceCenterY = this.faceTop + this.faceHeight / 2;
-          normX = (posX - faceCenterX) / (this.faceWidth / 2 || 1);
-          normY = (posY - faceCenterY) / (this.faceHeight / 2 || 1);
+          const faceCX = this.faceLeft + this.faceWidth / 2;
+          const faceCY = this.faceTop + this.faceHeight / 2;
+          normX = (posX - faceCX) / (this.faceWidth / 2 || 1);
+          normY = (posY - faceCY) / (this.faceHeight / 2 || 1);
         } else {
           normX = posX / (partW / 2 || 1);
           normY = posY / (partH / 2 || 1);
         }
         const distSq = normX * normX + normY * normY;
-        const bulge = Math.max(0, 1.0 - distSq); // dome shape
+        const bulge = Math.max(0, 1.0 - distSq);
         
-        // Map brightness to depth Z coordinate, combined with the spherical bulge
-        // This gives flat pictures a real 3D head-like roundness!
         const posZ = ((brightness - 128) / 128) * this.depthStrength * 0.7 + (bulge * this.depthStrength * 0.8);
         
-        newTargets.push({ x: posX, y: posY, z: posZ, r: r, g: g, b: b });
+        newTargets.push({ x: posX, y: posY, z: posZ, r, g, b });
       }
     }
 
-    // Shuffle targets to scatter the particles during morphing transition
+    // Shuffle targets for scatter animation
     for (let i = newTargets.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      const temp = newTargets[i];
-      newTargets[i] = newTargets[j];
-      newTargets[j] = temp;
+      [newTargets[i], newTargets[j]] = [newTargets[j], newTargets[i]];
     }
 
     const currentLen = this.particles.length;
     const targetLen = newTargets.length;
     const minLen = Math.min(currentLen, targetLen);
 
-    // Reposition current particles to new locations
     for (let i = 0; i < minLen; i++) {
       const p = this.particles[i];
       p.destX = newTargets[i].x;
@@ -620,15 +608,11 @@ const Engine = {
     }
 
     if (currentLen > targetLen) {
-      // Discard excess particles
       this.particles = this.particles.slice(0, targetLen);
     } else if (currentLen < targetLen) {
-      // Bud/Split new particles from random existing particle spots
       for (let i = currentLen; i < targetLen; i++) {
         const t = newTargets[i];
-        let startX = t.x;
-        let startY = t.y;
-        let startZ = t.z;
+        let startX = t.x, startY = t.y, startZ = t.z;
 
         if (this.particles.length > 0) {
           const parent = this.particles[Math.floor(Math.random() * this.particles.length)];
@@ -646,24 +630,20 @@ const Engine = {
     }
   },
 
-  // Fallback in case of local load or CORS errors
   generateFallbackPattern() {
     this.particles = [];
     const size = Math.min(this.canvas.width, this.canvas.height) / (window.devicePixelRatio || 1) * 0.3;
     this.faceWidth = size * 2;
     this.faceHeight = size * 2;
     
-    // Generate a simple procedural mesh resembling a holographic face mask
     for (let i = 0; i < this.particleCount; i++) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos((Math.random() * 2) - 1);
       
-      // Ellipsoid approximation of a face
       const posX = size * 0.8 * Math.sin(phi) * Math.cos(theta);
       const posY = size * 1.1 * Math.sin(phi) * Math.sin(theta);
       let posZ = size * 0.8 * Math.cos(phi);
       
-      // Dent the eye orbits and mouth to make it look structural
       const distEyeL = Math.hypot(posX + size*0.2, posY + size*0.15);
       const distEyeR = Math.hypot(posX - size*0.2, posY + size*0.15);
       if (distEyeL < size*0.15) posZ += (size*0.15 - distEyeL) * 0.5;
@@ -693,21 +673,18 @@ const Engine = {
       };
     };
 
-    // Hover & interaction coordinate trackers
     canvasWrap.addEventListener('mousemove', (e) => {
       const pos = getCanvasMousePos(e);
       this.mouse.x = pos.x;
       this.mouse.y = pos.y;
-      this.idleTime = 0; // Reset idle timer
+      this.idleTime = 0;
 
-      // Camera tilt parallax effect when not dragging
       if (!this.mouse.isDragging) {
         const normX = (pos.x / (this.canvas.width / dpr)) - 0.5;
         const normY = (pos.y / (this.canvas.height / dpr)) - 0.5;
         this.targetYaw = normX * 0.8;
         this.targetPitch = -normY * 0.8;
       } else {
-        // Orbit mode dragging
         const dx = pos.x - this.mouse.px;
         const dy = pos.y - this.mouse.py;
         this.targetYaw += dx * 0.008;
@@ -722,7 +699,7 @@ const Engine = {
       this.mouse.isDragging = true;
       this.mouse.px = pos.x;
       this.mouse.py = pos.y;
-      this.idleTime = 0; // Reset idle timer
+      this.idleTime = 0;
     });
 
     window.addEventListener('mouseup', () => {
@@ -732,39 +709,35 @@ const Engine = {
     canvasWrap.addEventListener('mouseleave', () => {
       this.mouse.x = null;
       this.mouse.y = null;
-      // Reset tilt slowly
       this.targetYaw = 0;
       this.targetPitch = 0;
       this.targetRoll = 0;
     });
 
-    // Touch support for mobiles
     canvasWrap.addEventListener('touchmove', (e) => {
       const pos = getCanvasMousePos(e);
       this.mouse.x = pos.x;
       this.mouse.y = pos.y;
-      this.idleTime = 0; // Reset idle timer
+      this.idleTime = 0;
     });
     canvasWrap.addEventListener('touchstart', (e) => {
       const pos = getCanvasMousePos(e);
       this.mouse.x = pos.x;
       this.mouse.y = pos.y;
-      this.idleTime = 0; // Reset idle timer
+      this.idleTime = 0;
     });
     canvasWrap.addEventListener('touchend', () => {
       this.mouse.x = null;
       this.mouse.y = null;
     });
 
-    // Scroll to Zoom camera
     canvasWrap.addEventListener('wheel', (e) => {
       e.preventDefault();
       this.targetZoom -= e.deltaY * 0.0008;
       this.targetZoom = Math.max(0.4, Math.min(2.5, this.targetZoom));
-      this.idleTime = 0; // Reset idle timer
+      this.idleTime = 0;
     }, { passive: false });
 
-    // Handle Window Resize
     window.addEventListener('resize', () => {
       this.resizeCanvas();
       this.scanImage();
@@ -799,7 +772,18 @@ const Engine = {
       }
     });
 
-    // 2. Expressions
+    // 2. Focus Mode (Face Only vs Full Image)
+    const focusBtns = document.querySelectorAll('[data-focus]');
+    focusBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        focusBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.focusMode = btn.dataset.focus;
+        this.scanImage(); // Re-scan with new focus mode
+      });
+    });
+
+    // 3. Expressions
     const exprButtons = document.querySelectorAll('.expr-btn');
     exprButtons.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -807,14 +791,13 @@ const Engine = {
         btn.classList.add('active');
         this.activeExpression = btn.dataset.expr;
         
-        // Explode triggers a sudden force burst in velocities
         if (this.activeExpression === 'explode') {
           this.triggerExplosion();
         }
       });
     });
 
-    // 3. Avatar Gestures
+    // 4. Avatar Gestures
     const gestureButtons = document.querySelectorAll('.gesture-btn');
     gestureButtons.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -823,7 +806,7 @@ const Engine = {
       });
     });
 
-    // 3. Color Themes
+    // 5. Color Themes
     const colorButtons = document.querySelectorAll('.color-btn');
     colorButtons.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -833,7 +816,7 @@ const Engine = {
       });
     });
 
-    // 4. Sliders
+    // 6. Sliders
     const sliders = [
       { id: 'count', param: 'particleCount', cb: (val) => { this.particleCount = parseInt(val); this.scanImage(); } },
       { id: 'size', param: 'particleSize', cb: (val) => { this.particleSize = parseFloat(val); this.particles.forEach(p => p.size = this.particleSize); } },
@@ -850,7 +833,7 @@ const Engine = {
       });
     });
 
-    // 5. Radio Buttons (Mouse Interaction)
+    // 7. Radio Buttons (Mouse Interaction)
     const radios = document.getElementsByName('mouseMode');
     radios.forEach(radio => {
       radio.addEventListener('change', (e) => {
@@ -858,7 +841,7 @@ const Engine = {
       });
     });
 
-    // 6. Audio React
+    // 8. Audio React
     const audioCheckbox = document.getElementById('audioReactCheckbox');
     audioCheckbox.addEventListener('change', (e) => {
       this.audioReact = e.target.checked;
@@ -872,30 +855,20 @@ const Engine = {
     this.colorTheme = 'original';
     this.activeExpression = 'breathe';
 
-    // Reset color theme buttons in UI
     const colorButtons = document.querySelectorAll('.color-btn');
     colorButtons.forEach(btn => {
-      if (btn.dataset.color === 'original') {
-        btn.classList.add('active');
-      } else {
-        btn.classList.remove('active');
-      }
+      btn.classList.toggle('active', btn.dataset.color === 'original');
     });
 
-    // Reset expression buttons in UI
     const exprButtons = document.querySelectorAll('.expr-btn');
     exprButtons.forEach(btn => {
-      if (btn.dataset.expr === 'breathe') {
-        btn.classList.add('active');
-      } else {
-        btn.classList.remove('active');
-      }
+      btn.classList.toggle('active', btn.dataset.expr === 'breathe');
     });
   },
 
   handleFile(file) {
     if (!file.type.match('image.*')) return;
-    this.resetUIStates(); // Automatically restore default original colors and breathing movement
+    this.resetUIStates();
     const reader = new FileReader();
     reader.onload = (e) => {
       this.loadImage(e.target.result);
@@ -906,12 +879,11 @@ const Engine = {
   triggerGesture(name) {
     this.activeGesture = name;
     this.gestureTimer = 0;
-    this.gestureDuration = name === 'tilt' ? 2.5 : 2.0; // seconds
+    this.gestureDuration = name === 'tilt' ? 2.5 : 2.0;
   },
 
   triggerExplosion() {
     this.particles.forEach(p => {
-      // Explode outwards in random 3D vectors
       const force = 18 + Math.random() * 15;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos((Math.random() * 2) - 1);
@@ -944,7 +916,6 @@ const Engine = {
   updateColors() {
     const num = this.particles.length;
     
-    // Theme color algorithms mapping coordinates to styling palettes
     for (let i = 0; i < num; i++) {
       const p = this.particles[i];
       let tr = p.origR;
@@ -952,29 +923,28 @@ const Engine = {
       let tb = p.origB;
 
       switch(this.colorTheme) {
-        case 'cyberpunk':
-          // Gradient between Neon Pink and Cyber Cyan along X axis
+        case 'cyberpunk': {
           const ratioX = (p.destX + 150) / 300;
-          tr = Math.round(255 * (1 - ratioX) + 0 * ratioX);
-          tg = Math.round(0 * (1 - ratioX) + 242 * ratioX);
+          tr = Math.round(255 * (1 - ratioX));
+          tg = Math.round(242 * ratioX);
           tb = Math.round(127 * (1 - ratioX) + 254 * ratioX);
           break;
-        case 'hologram':
-          // Pure Holographic Cyan, brightness mapped to Z coordinate
+        }
+        case 'hologram': {
           const ratioZ = (p.z + 50) / 100;
-          tr = Math.round(0 * ratioZ);
+          tr = 0;
           tg = Math.round(242 * Math.max(0.4, ratioZ));
           tb = Math.round(254 * Math.max(0.6, ratioZ));
           break;
-        case 'aurora':
-          // Aurora Green-Gold based on distance from center
+        }
+        case 'aurora': {
           const ratioD = Math.min(1, p.distFromCenter / 200);
-          tr = Math.round(255 * (1 - ratioD) + 0 * ratioD);
+          tr = Math.round(255 * (1 - ratioD));
           tg = Math.round(215 * (1 - ratioD) + 255 * ratioD);
-          tb = Math.round(0 * (1 - ratioD) + 135 * ratioD);
+          tb = Math.round(135 * ratioD);
           break;
-        case 'inferno':
-          // Firestorm Red, Yellow, Orange based on Z displacement
+        }
+        case 'inferno': {
           const rZ = (p.destZ + 40) / 80;
           if (rZ > 0.5) {
             tr = 255;
@@ -986,12 +956,9 @@ const Engine = {
             tb = 0;
           }
           break;
-        default:
-          // 'original' - do nothing, already set
-          break;
+        }
       }
 
-      // Smooth color transitions
       p.lerpColor(tr, tg, tb, 0.1);
     }
   },
@@ -1004,25 +971,22 @@ const Engine = {
     this.ctx.clearRect(0, 0, width, height);
 
     this.time += 0.01;
-
-    // Increment idle timer (approx 60fps delta)
     this.idleTime += 0.016;
 
-    // Trigger slow camera looking-around movements when idle
+    // Idle camera movements
     if (this.idleTime > 4.0) {
       this.targetYaw = Math.sin(this.time * 0.4) * 0.22;
       this.targetPitch = Math.cos(this.time * 0.3) * 0.12;
       this.targetRoll = Math.sin(this.time * 0.25) * 0.06;
 
-      // Randomly trigger standard gestures during idle (nod or tilt head)
       if (Math.random() < 0.0015 && this.activeGesture === 'none') {
         this.triggerGesture(Math.random() < 0.5 ? 'nod' : 'tilt');
       }
     } else {
-      this.targetRoll = 0; // lock roll when mouse moves
+      this.targetRoll = 0;
     }
 
-    // Smoothly interpolate camera yaw, pitch, and roll
+    // Smooth camera interpolation
     this.yaw += (this.targetYaw - this.yaw) * 0.08;
     this.pitch += (this.targetPitch - this.pitch) * 0.08;
     this.roll += (this.targetRoll - this.roll) * 0.08;
@@ -1035,16 +999,13 @@ const Engine = {
       for (let i = 0; i < this.dataArray.length; i++) {
         sum += this.dataArray[i];
       }
-      const avg = sum / this.dataArray.length;
-      this.audioScale = avg / 255;
+      this.audioScale = (sum / this.dataArray.length) / 255;
     } else {
       this.audioScale = 0;
     }
 
-    // Compute active gesture offsets and mouth speaker scaling
-    let yawOffset = 0;
-    let pitchOffset = 0;
-    let rollOffset = 0;
+    // Gesture offsets
+    let yawOffset = 0, pitchOffset = 0, rollOffset = 0;
 
     if (this.activeGesture !== 'none') {
       this.gestureTimer += 0.016;
@@ -1064,17 +1025,14 @@ const Engine = {
       }
     }
 
-    // Connect voice/sound pulse to mouth opening
     if (this.audioReact) {
       this.mouthOpenScale = Math.min(1.0, this.audioScale * 3.5);
     } else if (this.activeGesture !== 'speak') {
       this.mouthOpenScale = 0;
     }
 
-    // Update color states
     this.updateColors();
 
-    // Combined angles for projection and voxel rotations
     const currentYaw = this.yaw + yawOffset;
     const currentPitch = this.pitch + pitchOffset;
     const currentRoll = this.roll + rollOffset;
@@ -1090,101 +1048,27 @@ const Engine = {
     // 2. Depth sorting (Painter's Algorithm)
     this.particles.sort((a, b) => b.projZ - a.projZ);
 
-    // 3. 3D Voxel/Cube Axis Rotations & Lighting Calculations
-    const size = this.particleSize;
-    const d = size; // half-side size
-
-    // Helper rotation function for unit axes
-    const rotate3D = (x, y, z, yaw, pitch, roll) => {
-      const cosR = Math.cos(roll);
-      const sinR = Math.sin(roll);
-      const rx = x * cosR - y * sinR;
-      const ry = x * sinR + y * cosR;
-
-      const cosY = Math.cos(yaw);
-      const sinY = Math.sin(yaw);
-      const x1 = rx * cosY - z * sinY;
-      const z1 = rx * sinY + z * cosY;
-
-      const cosX = Math.cos(pitch);
-      const sinX = Math.sin(pitch);
-      const y2 = ry * cosX - z1 * sinX;
-      const z2 = ry * sinX + z1 * cosX;
-      return { x: x1, y: y2, z: z2 };
-    };
-
-    // Rotated unit axes
-    const uRot = rotate3D(d, 0, 0, currentYaw, currentPitch, currentRoll);
-    const vRot = rotate3D(0, d, 0, currentYaw, currentPitch, currentRoll);
-    const wRot = rotate3D(0, 0, d, currentYaw, currentPitch, currentRoll);
-
-    // Directional light vector pointing from top-right-front in 3D
-    const Lx = 0.577;
-    const Ly = -0.577;
-    const Lz = 0.577;
-
-    // Face shading intensities: dot product of light vector with normal vectors of three faces
-    const intensityZ = Math.max(0.2, Math.min(1.0, 0.55 + 0.45 * (wRot.x * Lx + wRot.y * Ly + wRot.z * Lz) / d));
-    const intensityX = Math.max(0.2, Math.min(1.0, 0.55 + 0.45 * (uRot.x * Lx + uRot.y * Ly + uRot.z * Lz) / d));
-    const intensityY = Math.max(0.2, Math.min(1.0, 0.55 + 0.45 * (vRot.x * Lx + vRot.y * Ly + vRot.z * Lz) / d));
-
-    // 4. Render projected particles as 3D Voxel Cubes
+    // 3. Optimized rendering: use fillRect for speed instead of canvas paths
+    // This eliminates the per-particle beginPath/closePath/fill overhead
+    const ctx = this.ctx;
+    
     for (let i = 0; i < numParticles; i++) {
       const p = this.particles[i];
-      // Skip drawing if particle has fallen off screen boundaries
+      
+      // Skip off-screen particles
       if (p.screenX < -20 || p.screenX > width + 20 || p.screenY < -20 || p.screenY > height + 20) {
         continue;
       }
 
-      // Calculate scale factor incorporating camera zoom and perspective depth
-      const scaleFactor = (p.projSize / p.size);
-
-      // Project the rotated half-axes to screen space
-      const du = { x: uRot.x * scaleFactor, y: uRot.y * scaleFactor };
-      const dv = { x: vRot.x * scaleFactor, y: vRot.y * scaleFactor };
-      const dw = { x: wRot.x * scaleFactor, y: wRot.y * scaleFactor };
-
-      // Calculate screen start corner to center the cube around p.screenX, p.screenY
-      const startX = p.screenX - (du.x + dv.x + dw.x) / 2;
-      const startY = p.screenY - (du.y + dv.y + dw.y) / 2;
-
-      // Color with depth fog
+      const s = p.projSize;
       const pr = Math.round(p.r);
       const pg = Math.round(p.g);
       const pb = Math.round(p.b);
       const alpha = p.projAlpha;
 
-      // Draw the three visible faces of the 3D Voxel Cube:
-      
-      // Face 1 (Z-face / Top-like): color modulated by intensityZ
-      this.ctx.fillStyle = `rgba(${Math.round(pr * intensityZ)}, ${Math.round(pg * intensityZ)}, ${Math.round(pb * intensityZ)}, ${alpha})`;
-      this.ctx.beginPath();
-      this.ctx.moveTo(startX, startY);
-      this.ctx.lineTo(startX + du.x, startY + du.y);
-      this.ctx.lineTo(startX + du.x + dv.x, startY + du.y + dv.y);
-      this.ctx.lineTo(startX + dv.x, startY + dv.y);
-      this.ctx.closePath();
-      this.ctx.fill();
-
-      // Face 2 (X-face / Left-like): color modulated by intensityX
-      this.ctx.fillStyle = `rgba(${Math.round(pr * intensityX)}, ${Math.round(pg * intensityX)}, ${Math.round(pb * intensityX)}, ${alpha})`;
-      this.ctx.beginPath();
-      this.ctx.moveTo(startX, startY);
-      this.ctx.lineTo(startX + dv.x, startY + dv.y);
-      this.ctx.lineTo(startX + dv.x + dw.x, startY + dv.y + dv.y);
-      this.ctx.lineTo(startX + dw.x, startY + dw.y);
-      this.ctx.closePath();
-      this.ctx.fill();
-
-      // Face 3 (Y-face / Right-like): color modulated by intensityY
-      this.ctx.fillStyle = `rgba(${Math.round(pr * intensityY)}, ${Math.round(pg * intensityY)}, ${Math.round(pb * intensityY)}, ${alpha})`;
-      this.ctx.beginPath();
-      this.ctx.moveTo(startX, startY);
-      this.ctx.lineTo(startX + dw.x, startY + dw.y);
-      this.ctx.lineTo(startX + dw.x + du.x, startY + dw.y + du.y);
-      this.ctx.lineTo(startX + du.x, startY + du.y);
-      this.ctx.closePath();
-      this.ctx.fill();
+      // Draw as a single filled rectangle (much faster than 3 polygon faces)
+      ctx.fillStyle = `rgba(${pr},${pg},${pb},${alpha})`;
+      ctx.fillRect(p.screenX - s/2, p.screenY - s/2, s, s);
     }
 
     requestAnimationFrame(() => this.animate());
