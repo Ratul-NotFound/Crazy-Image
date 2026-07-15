@@ -329,7 +329,9 @@ const Engine = {
   dataArray: null,
   audioScale: 0,
 
-  init() {
+  modelsLoaded: false,
+
+  async init() {
     this.canvas = document.getElementById('particleCanvas');
     this.ctx = this.canvas.getContext('2d');
     
@@ -337,6 +339,16 @@ const Engine = {
     this.setupEventListeners();
     this.setupControlsUI();
     
+    try {
+      console.log("Loading face-api.js models from jsDelivr/GitHub...");
+      await faceapi.nets.tinyFaceDetector.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+      await faceapi.nets.faceLandmark68Net.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+      this.modelsLoaded = true;
+      console.log("Face-api models loaded!");
+    } catch (e) {
+      console.warn("Could not load face-api models", e);
+    }
+
     // Load default demo portrait
     this.loadImage('portrait.png');
   },
@@ -356,36 +368,29 @@ const Engine = {
     
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.onload = () => {
+    img.onload = async () => {
       this.loadedImage = img;
       
-      // Initialize tracking.js face detector
-      try {
-        const tracker = new tracking.ObjectTracker('face');
-        tracker.setInitialScale(4);
-        tracker.setStepSize(2);
-        tracker.setEdgesDensity(0.1);
-        
-        tracker.on('track', (event) => {
-          let faceRect = null;
-          if (event.data && event.data.length > 0) {
-            // Sort by area size, pick largest detected face box
-            event.data.sort((a, b) => b.width * b.height - a.width * a.height);
-            faceRect = event.data[0];
-            console.log("Detected face coordinates relative to original image:", faceRect);
+      if (this.modelsLoaded && typeof faceapi !== 'undefined') {
+        try {
+          // Detect face and 68 landmarks
+          const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+          if (detection) {
+            console.log("Face and 68 landmarks detected!", detection);
+            this.scanImage(detection);
           } else {
-            console.log("No face detected, using fallback centered box.");
+            console.log("No face detected by face-api, using fallback centered box.");
+            this.scanImage(null);
           }
-          this.scanImage(faceRect);
-          document.getElementById('loadingOverlay').classList.add('hidden');
-        });
-        
-        tracking.track(img, tracker);
-      } catch (e) {
-        console.warn("Face tracking library not loaded or failed, using centered box.", e);
+        } catch (e) {
+          console.warn("Face-api detection failed.", e);
+          this.scanImage(null);
+        }
+      } else {
+        console.log("Models not loaded, using fallback.");
         this.scanImage(null);
-        document.getElementById('loadingOverlay').classList.add('hidden');
       }
+      document.getElementById('loadingOverlay').classList.add('hidden');
     };
     img.onerror = () => {
       console.warn("Could not load image, building procedural face outline.");
@@ -395,14 +400,14 @@ const Engine = {
     img.src = src;
   },
 
-  scanImage(faceRect) {
+  scanImage(detection) {
     if (!this.loadedImage) return;
 
-    // Cache faceRect on the Engine for resizing or parameter changes
-    if (faceRect !== undefined) {
-      this.cachedFaceRect = faceRect;
+    // Cache detection on the Engine for resizing or parameter changes
+    if (detection !== undefined) {
+      this.cachedDetection = detection;
     } else {
-      faceRect = this.cachedFaceRect || null;
+      detection = this.cachedDetection || null;
     }
 
     // Create a temporary thumbnail canvas to downsample pixel grid
@@ -435,16 +440,61 @@ const Engine = {
     const partW = tempWidth * scale;
     const partH = tempHeight * scale;
 
-    if (faceRect) {
-      // Bounding box mapping from original image space to centered particle space
+    if (detection) {
+      // Map bounding box
+      const box = detection.detection.box;
       const origW = this.loadedImage.width;
       const origH = this.loadedImage.height;
 
-      this.faceWidth = (faceRect.width / origW) * partW;
-      this.faceHeight = (faceRect.height / origH) * partH;
-      this.faceLeft = (faceRect.x / origW - 0.5) * partW;
-      this.faceTop = (faceRect.y / origH - 0.5) * partH;
+      this.faceWidth = (box.width / origW) * partW;
+      this.faceHeight = (box.height / origH) * partH;
+      this.faceLeft = (box.x / origW - 0.5) * partW;
+      this.faceTop = (box.y / origH - 0.5) * partH;
       this.hasFaceDetected = true;
+
+      // Helper to map a 68-point landmark point to particle coordinates
+      const mapPoint = (p) => {
+        return {
+          x: (p.x / origW - 0.5) * partW,
+          y: (p.y / origH - 0.5) * partH
+        };
+      };
+      
+      const landmarks = detection.landmarks.positions;
+      
+      // Calculate averages of key facial feature clusters
+      const getAvg = (indices) => {
+        let x = 0, y = 0;
+        indices.forEach(i => {
+          const pt = mapPoint(landmarks[i]);
+          x += pt.x; y += pt.y;
+        });
+        return { x: x / indices.length, y: y / indices.length };
+      };
+
+      const leftEye = getAvg([36, 37, 38, 39, 40, 41]);
+      const rightEye = getAvg([42, 43, 44, 45, 46, 47]);
+      const leftEyebrow = getAvg([17, 18, 19, 20, 21]);
+      const rightEyebrow = getAvg([22, 23, 24, 25, 26]);
+      const mouth = getAvg([48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59]);
+
+      this.leftEyeX = leftEye.x;
+      this.rightEyeX = rightEye.x;
+      this.eyeY = (leftEye.y + rightEye.y) / 2;
+      this.eyeRad = this.faceWidth * 0.13;
+      this.eyebrowY = (leftEyebrow.y + rightEyebrow.y) / 2;
+
+      this.mouthY = mouth.y;
+      
+      // Compute mouth width and height dynamically based on landmarks
+      const mouthLeft = mapPoint(landmarks[48]).x;
+      const mouthRight = mapPoint(landmarks[54]).x;
+      const mouthTop = mapPoint(landmarks[51]).y;
+      const mouthBottom = mapPoint(landmarks[57]).y;
+      
+      this.mouthW = Math.max((mouthRight - mouthLeft) * 1.1, this.faceWidth * 0.15);
+      this.mouthH = Math.max((mouthBottom - mouthTop) * 1.3, this.faceHeight * 0.08);
+
     } else {
       // Fallback centered bounding box
       this.faceWidth = partW * 0.65;
@@ -452,19 +502,17 @@ const Engine = {
       this.faceLeft = -this.faceWidth / 2;
       this.faceTop = -this.faceHeight / 2;
       this.hasFaceDetected = false;
+
+      // Fallback relative coordinates
+      this.eyeY = this.faceTop + this.faceHeight * 0.38;
+      this.leftEyeX = this.faceLeft + this.faceWidth * 0.31;
+      this.rightEyeX = this.faceLeft + this.faceWidth * 0.69;
+      this.eyeRad = this.faceWidth * 0.13;
+      this.eyebrowY = this.faceTop + this.faceHeight * 0.24;
+      this.mouthY = this.faceTop + this.faceHeight * 0.74;
+      this.mouthW = this.faceWidth * 0.28;
+      this.mouthH = this.faceHeight * 0.11;
     }
-
-    // Coordinates of facial features in coordinate space:
-    this.eyeY = this.faceTop + this.faceHeight * 0.38;
-    this.leftEyeX = this.faceLeft + this.faceWidth * 0.31;
-    this.rightEyeX = this.faceLeft + this.faceWidth * 0.69;
-    this.eyeRad = this.faceWidth * 0.13;
-
-    this.eyebrowY = this.faceTop + this.faceHeight * 0.24;
-
-    this.mouthY = this.faceTop + this.faceHeight * 0.74;
-    this.mouthW = this.faceWidth * 0.28;
-    this.mouthH = this.faceHeight * 0.11;
 
     for (let y = 0; y < tempHeight; y++) {
       for (let x = 0; x < tempWidth; x++) {
@@ -489,7 +537,7 @@ const Engine = {
         // Bulge relative to face bounding box if detected, otherwise default center
         let normX = 0;
         let normY = 0;
-        if (faceRect) {
+        if (detection) {
           const faceCenterX = this.faceLeft + this.faceWidth / 2;
           const faceCenterY = this.faceTop + this.faceHeight / 2;
           normX = (posX - faceCenterX) / (this.faceWidth / 2 || 1);
