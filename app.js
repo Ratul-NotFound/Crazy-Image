@@ -50,186 +50,31 @@ class Particle3D {
     targetZ = this.destZ * depthFactor;
 
     // ---- APPLY LIVE EXPRESSIONS ----
-    // Smooth Elliptical Gaussian influence function for perfect organic blending
-    // Using independent X and Y sigmas allows wide features (mouth/jaw) to stretch naturally without tearing
-    const gauss = (px, py, cx, cy, sigmaX, sigmaY = sigmaX) => {
-      const dx = px - cx;
-      const dy = py - cy;
-      return Math.exp(-(dx * dx) / (2 * sigmaX * sigmaX) - (dy * dy) / (2 * sigmaY * sigmaY));
-    };
-
-    const faceW = Engine.faceWidth || 300;
-    const faceH = Engine.faceHeight || 300;
-    const faceCenterX = Engine.faceLeft !== undefined ? (Engine.faceLeft + faceW / 2) : 0;
-
-    const eyeY = Engine.eyeY !== undefined ? Engine.eyeY : -faceH * 0.12;
-    const leftEyeX = Engine.leftEyeX !== undefined ? Engine.leftEyeX : -faceW * 0.18;
-    const rightEyeX = Engine.rightEyeX !== undefined ? Engine.rightEyeX : faceW * 0.18;
-    const eyeRad = Engine.eyeRad !== undefined ? Engine.eyeRad : faceW * 0.09;
-
-    const eyebrowY = Engine.eyebrowY !== undefined ? Engine.eyebrowY : -faceH * 0.22;
-    const mouthY = Engine.mouthY !== undefined ? Engine.mouthY : faceH * 0.18;
-    const mouthW = Engine.mouthW !== undefined ? Engine.mouthW : faceW * 0.22;
-    const mouthH = Engine.mouthH !== undefined ? Engine.mouthH : faceH * 0.08;
-
-    // Advanced anatomical sizing for organic falloff
-    const eyeSigmaX = eyeRad * 1.6;
-    const eyeSigmaY = eyeRad * 1.2;
-    const browSigmaX = faceW * 0.15;
-    const browSigmaY = faceH * 0.10;
-    const mouthSigmaX = mouthW * 1.1; 
-    const mouthSigmaY = mouthH * 1.3;
-    const jawSigmaX = faceW * 0.35;
-    const jawSigmaY = faceH * 0.20;
-    const cheekSigma = faceW * 0.20;
-    const mouthCenterX = faceCenterX;
-
     // Particle position relative to face center
     const px = this.destX;
     const py = this.destY;
 
+    // Apply 68-point Inverse Distance Weighting mesh deformation
+    if (Engine.hasFaceDetected) {
+      const warp = Engine.sampleDeformationGrid(px, py);
+      targetX += warp.dx;
+      targetY += warp.dy;
+      targetZ += warp.dz;
+    }
+
+    // Procedural ambient animations (non-anatomical)
     if (activeExpression === 'breathe') {
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.015) * 8;
       targetX += Math.cos(time + this.destY * 0.01) * 2;
-
-    } else if (activeExpression === 'smile') {
-      // Subtle Mona Lisa smile
-      const mouthInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX * 0.9, mouthSigmaY * 0.8);
-      const cornerBias = Math.max(-1, Math.min(1, (px - mouthCenterX) / (mouthW || 1)));
-      const lift = -cornerBias * cornerBias * faceH * 0.025 * mouthInf; // very subtle lift
-      const stretch = cornerBias * faceW * 0.015 * mouthInf; // very subtle widen
-      targetY += lift;
-      targetX += stretch;
-
-      // Cheeks puff slightly
-      const leftCheekX = leftEyeX;
-      const rightCheekX = rightEyeX;
-      const cheekY = mouthY - faceH * 0.08;
-      const leftCheek = gauss(px, py, leftCheekX, cheekY, cheekSigma * 0.8);
-      const rightCheek = gauss(px, py, rightCheekX, cheekY, cheekSigma * 0.8);
-      targetZ += (leftCheek + rightCheek) * 5; // gentle 3D volume
-      targetY -= (leftCheek + rightCheek) * faceH * 0.008;
-
-      // Lower eyelids squint microscopically (the Duchenne marker)
-      const leftEyeInf = gauss(px, py, leftEyeX, eyeY + eyeRad * 0.6, eyeSigmaX * 0.8, eyeSigmaY * 0.6);
-      const rightEyeInf = gauss(px, py, rightEyeX, eyeY + eyeRad * 0.6, eyeSigmaX * 0.8, eyeSigmaY * 0.6);
-      targetY -= (leftEyeInf + rightEyeInf) * faceH * 0.008;
-
-      targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 3;
-
-    } else if (activeExpression === 'wink') {
-      // Precise right eye closure (mostly upper lid coming down)
-      const rightUpperLid = gauss(px, py, rightEyeX, eyeY - eyeRad * 0.15, eyeSigmaX * 0.8, eyeSigmaY * 0.4);
-      const rightLowerLid = gauss(px, py, rightEyeX, eyeY + eyeRad * 0.25, eyeSigmaX * 0.8, eyeSigmaY * 0.4);
-      targetY += rightUpperLid * faceH * 0.018; 
-      targetY -= rightLowerLid * faceH * 0.008; 
-      targetZ -= (rightUpperLid + rightLowerLid) * 3; 
-
-      // Right cheek pushes up slightly to meet the wink
-      const rightCheek = gauss(px, py, rightEyeX, mouthY - faceH * 0.08, cheekSigma * 0.7);
-      targetY -= rightCheek * faceH * 0.01;
-
-      // Micro smirk
-      const smirkInf = gauss(px, py, mouthCenterX + mouthW * 0.4, mouthY, mouthSigmaX * 0.5, mouthSigmaY * 0.6);
-      targetY -= smirkInf * faceH * 0.015;
-
-      targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 3;
-
-    } else if (activeExpression === 'surprise') {
-      // Subtle jaw drop and brow raise (looks like awe/amazement)
-      const upperLipY = mouthY - mouthH * 0.3;
-      const lowerJawY = mouthY + mouthH * 0.6;
-      
-      const upperLipInf = gauss(px, py, mouthCenterX, upperLipY, mouthSigmaX, mouthSigmaY * 0.6);
-      const lowerJawInf = gauss(px, py, mouthCenterX, lowerJawY, jawSigmaX, jawSigmaY);
-
-      targetY -= upperLipInf * faceH * 0.003;
-      targetY += lowerJawInf * faceH * 0.035; // reduced from 0.10 to prevent rubber stretching
-      targetZ -= lowerJawInf * 3; // jaw retracts slightly when dropping
-
-      // Brows raise
-      const leftBrowInf = gauss(px, py, leftEyeX, eyebrowY, browSigmaX * 0.8, browSigmaY * 0.8);
-      const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigmaX * 0.8, browSigmaY * 0.8);
-      targetY -= (leftBrowInf + rightBrowInf) * faceH * 0.025;
-
-      // Upper eyelids widen slightly
-      const leftEyeTop = gauss(px, py, leftEyeX, eyeY - eyeRad * 0.3, eyeSigmaX * 0.8, eyeSigmaY * 0.5);
-      const rightEyeTop = gauss(px, py, rightEyeX, eyeY - eyeRad * 0.3, eyeSigmaX * 0.8, eyeSigmaY * 0.5);
-      targetY -= (leftEyeTop + rightEyeTop) * faceH * 0.01;
-
-      targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 3;
-
-    } else if (activeExpression === 'angry') {
-      // Subtle brow furrow (glare)
-      const leftBrowInf = gauss(px, py, leftEyeX, eyebrowY, browSigmaX * 0.8, browSigmaY * 0.8);
-      const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigmaX * 0.8, browSigmaY * 0.8);
-      targetY += (leftBrowInf + rightBrowInf) * faceH * 0.02;
-      const browDx = px - faceCenterX;
-      targetX -= browDx * 0.05 * (leftBrowInf + rightBrowInf); // pull inward
-
-      // Eyelids squint/tense
-      const leftUpperLid = gauss(px, py, leftEyeX, eyeY - eyeRad * 0.2, eyeSigmaX * 0.8, eyeSigmaY * 0.5);
-      const rightUpperLid = gauss(px, py, rightEyeX, eyeY - eyeRad * 0.2, eyeSigmaX * 0.8, eyeSigmaY * 0.5);
-      const leftLowerLid = gauss(px, py, leftEyeX, eyeY + eyeRad * 0.2, eyeSigmaX * 0.8, eyeSigmaY * 0.5);
-      const rightLowerLid = gauss(px, py, rightEyeX, eyeY + eyeRad * 0.2, eyeSigmaX * 0.8, eyeSigmaY * 0.5);
-
-      targetY += (leftUpperLid + rightUpperLid) * faceH * 0.008;
-      targetY -= (leftLowerLid + rightLowerLid) * faceH * 0.008;
-
-      // Lips compress slightly
-      const upperLipInf = gauss(px, py, mouthCenterX, mouthY - mouthH * 0.2, mouthSigmaX * 0.8, mouthSigmaY * 0.5);
-      const lowerLipInf = gauss(px, py, mouthCenterX, mouthY + mouthH * 0.2, mouthSigmaX * 0.8, mouthSigmaY * 0.5);
-      targetY += upperLipInf * faceH * 0.006;
-      targetY -= lowerLipInf * faceH * 0.006;
-
-      targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 3;
-
-    } else if (activeExpression === 'sad') {
-      // Subtle melancholic droop
-      const mouthInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX * 0.8, mouthSigmaY * 0.8);
-      const cornerBias = Math.max(-1, Math.min(1, (px - mouthCenterX) / (mouthW || 1)));
-      const droop = cornerBias * cornerBias * faceH * 0.02 * mouthInf;
-      targetY += droop;
-
-      // Inner brows lift slightly
-      const leftBrowInf = gauss(px, py, leftEyeX, eyebrowY, browSigmaX * 0.8, browSigmaY * 0.8);
-      const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigmaX * 0.8, browSigmaY * 0.8);
-      const browInnerBias = 1.0 - Math.min(1, Math.abs(px - faceCenterX) / (faceW * 0.25));
-      targetY -= (leftBrowInf + rightBrowInf) * browInnerBias * faceH * 0.018;
-
-      // Eyelids slightly heavy
-      const leftUpperLid = gauss(px, py, leftEyeX, eyeY - eyeRad * 0.2, eyeSigmaX * 0.8, eyeSigmaY * 0.5);
-      const rightUpperLid = gauss(px, py, rightEyeX, eyeY - eyeRad * 0.2, eyeSigmaX * 0.8, eyeSigmaY * 0.5);
-      targetY += (leftUpperLid + rightUpperLid) * faceH * 0.008;
-
-      targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 3;
-
     } else if (activeExpression === 'glitch') {
-      if (Math.random() < 0.005) {
-        this.x += (Math.random() - 0.5) * 30;
-      }
-      if (Math.random() < 0.003) {
-        this.z += (Math.random() - 0.5) * 40;
-      }
+      if (Math.random() < 0.005) this.x += (Math.random() - 0.5) * 30;
+      if (Math.random() < 0.003) this.z += (Math.random() - 0.5) * 40;
     } else if (activeExpression === 'vortex') {
       const orbitRadius = Math.max(10, this.distFromCenter);
       const angle = time * 1.5 + this.distFromCenter * 0.005;
       targetX = Math.cos(angle) * orbitRadius;
       targetY = Math.sin(angle) * orbitRadius;
       targetZ = this.destZ * depthFactor + Math.sin(time * 3 + this.distFromCenter * 0.02) * 15;
-    }
-
-    // ---- JAW SPEAK MOVEMENT (Anatomically Smooth & Subtle) ----
-    if (mouthOpenScale > 0) {
-      const upperLipY = mouthY - mouthH * 0.3;
-      const lowerJawY = mouthY + mouthH * 0.6;
-      
-      const upperLipInf = gauss(px, py, mouthCenterX, upperLipY, mouthSigmaX, mouthSigmaY * 0.6);
-      const lowerJawInf = gauss(px, py, mouthCenterX, lowerJawY, jawSigmaX, jawSigmaY * 1.2);
-
-      targetY -= mouthOpenScale * faceH * 0.003 * upperLipInf;
-      targetY += mouthOpenScale * faceH * 0.02 * lowerJawInf;
-      targetZ -= mouthOpenScale * 2 * lowerJawInf;
     }
 
     // Apply spring physics pulling toward active targets
@@ -568,6 +413,7 @@ const Engine = {
       });
       
       const landmarks = detection.landmarks.positions;
+      this.neutralLandmarks = landmarks.map(mapPoint);
       
       const getAvg = (indices) => {
         let sx = 0, sy = 0;
@@ -1090,6 +936,144 @@ const Engine = {
 
       p.lerpColor(tr, tg, tb, 0.1);
     }
+  },
+
+  initDeformationGrid() {
+    this.gridCols = 15;
+    this.gridRows = 15;
+    this.grid = new Float32Array(this.gridCols * this.gridRows * 3); // dx, dy, dz
+    
+    // Bounds that cover the face plus some padding
+    this.gridStartX = this.faceLeft - this.faceWidth * 0.4;
+    this.gridStartY = this.faceTop - this.faceHeight * 0.4;
+    this.gridWidth = this.faceWidth * 1.8;
+    this.gridHeight = this.faceHeight * 1.8;
+    this.gridStepX = this.gridWidth / (this.gridCols - 1);
+    this.gridStepY = this.gridHeight / (this.gridRows - 1);
+  },
+
+  updateDeformationGrid(expression, mouthOpen, time) {
+    if (!this.neutralLandmarks) return;
+    
+    // 1. Create target landmarks (copy of neutral)
+    const targets = this.neutralLandmarks.map(p => ({ x: p.x, y: p.y, z: 0 }));
+    const fW = this.faceWidth;
+    const fH = this.faceHeight;
+    
+    // Apply expression offsets to targets (Pixel-perfect anatomical mapping)
+    if (expression === 'smile') {
+      // 48 (left corner), 54 (right corner)
+      targets[48].y -= fH * 0.04; targets[48].x -= fW * 0.03;
+      targets[54].y -= fH * 0.04; targets[54].x += fW * 0.03;
+      // Cheeks (2, 14) push up
+      targets[2].y -= fH * 0.01; targets[14].y -= fH * 0.01;
+      // Lower eyelids (40, 41, 46, 47) squint
+      targets[40].y -= fH * 0.01; targets[41].y -= fH * 0.01;
+      targets[46].y -= fH * 0.01; targets[47].y -= fH * 0.01;
+    } else if (expression === 'surprise') {
+      // Brows (17-26) raise
+      for(let i=17; i<=26; i++) targets[i].y -= fH * 0.04;
+      // Jaw (5-11) drops
+      for(let i=5; i<=11; i++) { targets[i].y += fH * 0.06; targets[i].z -= 5; }
+      // Lower lip (55-59) drops
+      for(let i=55; i<=59; i++) { targets[i].y += fH * 0.06; targets[i].z -= 5; }
+      // Upper eyelids (37,38, 43,44) widen
+      targets[37].y -= fH * 0.015; targets[38].y -= fH * 0.015;
+      targets[43].y -= fH * 0.015; targets[44].y -= fH * 0.015;
+    } else if (expression === 'angry') {
+      // Brows pull down and in
+      targets[19].y += fH * 0.03; targets[19].x += fW * 0.02;
+      targets[20].y += fH * 0.03; targets[20].x += fW * 0.02;
+      targets[21].y += fH * 0.03; targets[21].x += fW * 0.02;
+      targets[22].y += fH * 0.03; targets[22].x -= fW * 0.02;
+      targets[23].y += fH * 0.03; targets[23].x -= fW * 0.02;
+      targets[24].y += fH * 0.03; targets[24].x -= fW * 0.02;
+      // Squint
+      targets[37].y += fH * 0.01; targets[38].y += fH * 0.01;
+      targets[43].y += fH * 0.01; targets[44].y += fH * 0.01;
+      targets[40].y -= fH * 0.01; targets[41].y -= fH * 0.01;
+      targets[46].y -= fH * 0.01; targets[47].y -= fH * 0.01;
+    } else if (expression === 'sad') {
+      // Mouth corners down
+      targets[48].y += fH * 0.03; targets[54].y += fH * 0.03;
+      // Inner brows up (21, 22)
+      targets[21].y -= fH * 0.025; targets[22].y -= fH * 0.025;
+      targets[20].y -= fH * 0.01; targets[23].y -= fH * 0.01;
+    } else if (expression === 'wink') {
+      // Right eye (42-47) closes
+      targets[43].y += fH * 0.025; targets[44].y += fH * 0.025;
+      targets[46].y -= fH * 0.015; targets[47].y -= fH * 0.015;
+      // Right cheek up
+      targets[14].y -= fH * 0.01;
+    }
+    
+    // Speech (mouth open)
+    if (mouthOpen > 0) {
+      for(let i=5; i<=11; i++) { targets[i].y += fH * 0.04 * mouthOpen; targets[i].z -= 3 * mouthOpen; }
+      for(let i=55; i<=59; i++) { targets[i].y += fH * 0.04 * mouthOpen; targets[i].z -= 3 * mouthOpen; }
+    }
+    
+    // 2. Compute Inverse Distance Weighting (IDW) for each grid node
+    let idx = 0;
+    for (let r = 0; r < this.gridRows; r++) {
+      for (let c = 0; c < this.gridCols; c++) {
+        const gx = this.gridStartX + c * this.gridStepX;
+        const gy = this.gridStartY + r * this.gridStepY;
+        
+        let dx = 0, dy = 0, dz = 0, wSum = 0;
+        for (let i = 0; i < 68; i++) {
+           const nl = this.neutralLandmarks[i];
+           const tl = targets[i];
+           const dSq = (gx - nl.x)**2 + (gy - nl.y)**2;
+           // Weight function: steep falloff (p=4) for localized anatomical precision
+           const w = 1.0 / (dSq * dSq + 0.001); 
+           dx += (tl.x - nl.x) * w;
+           dy += (tl.y - nl.y) * w;
+           dz += tl.z * w;
+           wSum += w;
+        }
+        this.grid[idx++] = dx / wSum;
+        this.grid[idx++] = dy / wSum;
+        this.grid[idx++] = dz / wSum;
+      }
+    }
+  },
+
+  sampleDeformationGrid(px, py) {
+    if (!this.grid) return { dx: 0, dy: 0, dz: 0 };
+    
+    const xRatio = (px - this.gridStartX) / this.gridStepX;
+    const yRatio = (py - this.gridStartY) / this.gridStepY;
+    
+    // If outside the grid, zero deformation
+    if (xRatio < 0 || xRatio >= this.gridCols - 1 || yRatio < 0 || yRatio >= this.gridRows - 1) {
+      return { dx: 0, dy: 0, dz: 0 };
+    }
+    
+    // Bilinear interpolation
+    const c0 = Math.floor(xRatio);
+    const r0 = Math.floor(yRatio);
+    const c1 = c0 + 1;
+    const r1 = r0 + 1;
+    
+    const u = xRatio - c0;
+    const v = yRatio - r0;
+    
+    const i00 = (r0 * this.gridCols + c0) * 3;
+    const i10 = (r0 * this.gridCols + c1) * 3;
+    const i01 = (r1 * this.gridCols + c0) * 3;
+    const i11 = (r1 * this.gridCols + c1) * 3;
+    
+    const w00 = (1 - u) * (1 - v);
+    const w10 = u * (1 - v);
+    const w01 = (1 - u) * v;
+    const w11 = u * v;
+    
+    const dx = this.grid[i00]*w00 + this.grid[i10]*w10 + this.grid[i01]*w01 + this.grid[i11]*w11;
+    const dy = this.grid[i00+1]*w00 + this.grid[i10+1]*w10 + this.grid[i01+1]*w01 + this.grid[i11+1]*w11;
+    const dz = this.grid[i00+2]*w00 + this.grid[i10+2]*w10 + this.grid[i01+2]*w01 + this.grid[i11+2]*w11;
+    
+    return { dx, dy, dz };
   },
 
   animate() {
