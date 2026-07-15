@@ -53,16 +53,18 @@ class Particle3D {
     // ---- APPLY LIVE EXPRESSIONS ----
     const faceW = Engine.faceWidth || 300;
     const faceH = Engine.faceHeight || 300;
+    const faceCenterX = Engine.faceLeft !== undefined ? (Engine.faceLeft + faceW / 2) : 0;
+    const dxFromFaceCenter = this.destX - faceCenterX;
 
-    const eyeY = -faceH * 0.12;
-    const leftEyeX = -faceW * 0.18;
-    const rightEyeX = faceW * 0.18;
-    const eyeRad = faceW * 0.09;
+    const eyeY = Engine.eyeY !== undefined ? Engine.eyeY : -faceH * 0.12;
+    const leftEyeX = Engine.leftEyeX !== undefined ? Engine.leftEyeX : -faceW * 0.18;
+    const rightEyeX = Engine.rightEyeX !== undefined ? Engine.rightEyeX : faceW * 0.18;
+    const eyeRad = Engine.eyeRad !== undefined ? Engine.eyeRad : faceW * 0.09;
 
-    const eyebrowY = -faceH * 0.22;
-    const mouthY = faceH * 0.18;
-    const mouthW = faceW * 0.22;
-    const mouthH = faceH * 0.08;
+    const eyebrowY = Engine.eyebrowY !== undefined ? Engine.eyebrowY : -faceH * 0.22;
+    const mouthY = Engine.mouthY !== undefined ? Engine.mouthY : faceH * 0.18;
+    const mouthW = Engine.mouthW !== undefined ? Engine.mouthW : faceW * 0.22;
+    const mouthH = Engine.mouthH !== undefined ? Engine.mouthH : faceH * 0.08;
 
     if (activeExpression === 'breathe') {
       // Gentle, lifelike breathing motion using sinusoidal offsets
@@ -70,7 +72,7 @@ class Particle3D {
       targetX += Math.cos(time + this.destY * 0.01) * 3;
     } else if (activeExpression === 'smile') {
       // Smile: Pull corners of mouth upwards and outwards
-      const dxMouth = this.destX;
+      const dxMouth = dxFromFaceCenter;
       const dyMouth = this.destY - mouthY;
       if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
         const xRatio = dxMouth / mouthW; // -1 to 1
@@ -94,7 +96,7 @@ class Particle3D {
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
     } else if (activeExpression === 'surprise') {
       // Surprise: Open mouth (jaw down) and raise eyebrows
-      const dxMouth = this.destX;
+      const dxMouth = dxFromFaceCenter;
       const dyMouth = this.destY - mouthY;
       if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
         if (this.destY < mouthY) {
@@ -102,22 +104,22 @@ class Particle3D {
         } else {
           targetY += faceH * 0.07;
         }
-        targetX *= 0.95; // narrow mouth
+        targetX = faceCenterX + dxMouth * 0.95; // narrow mouth
       }
       // Eyebrows up
-      if (Math.abs(this.destX) < faceW * 0.3 && this.destY < eyebrowY + 15 && this.destY > eyebrowY - 15) {
+      if (Math.abs(dxFromFaceCenter) < faceW * 0.35 && this.destY < eyebrowY + 15 && this.destY > eyebrowY - 15) {
         targetY -= faceH * 0.05;
       }
       // Gentle breathe overlay
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
     } else if (activeExpression === 'angry') {
       // Angry: Pull eyebrows down and together, tighten mouth
-      if (Math.abs(this.destX) < faceW * 0.3 && this.destY < eyebrowY + 15 && this.destY > eyebrowY - 15) {
+      if (Math.abs(dxFromFaceCenter) < faceW * 0.35 && this.destY < eyebrowY + 15 && this.destY > eyebrowY - 15) {
         targetY += faceH * 0.035;
-        targetX += (this.destX > 0 ? -1 : 1) * (faceW * 0.025);
+        targetX += (dxFromFaceCenter > 0 ? -1 : 1) * (faceW * 0.025);
       }
       // Tight mouth
-      const dxMouth = this.destX;
+      const dxMouth = dxFromFaceCenter;
       const dyMouth = this.destY - mouthY;
       if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
         targetY = mouthY + dyMouth * 0.4;
@@ -126,7 +128,7 @@ class Particle3D {
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
     } else if (activeExpression === 'sad') {
       // Sad: Pull mouth corners down, raise inner eyebrows
-      const dxMouth = this.destX;
+      const dxMouth = dxFromFaceCenter;
       const dyMouth = this.destY - mouthY;
       if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
         const xRatio = dxMouth / mouthW;
@@ -134,12 +136,13 @@ class Particle3D {
         targetY += droop;
       }
       // Inner eyebrows up, outer eyebrows down
-      if (Math.abs(this.destX) < faceW * 0.3 && this.destY < eyebrowY + 15 && this.destY > eyebrowY - 15) {
-        const xRatio = Math.abs(this.destX) / (faceW * 0.3);
+      if (Math.abs(dxFromFaceCenter) < faceW * 0.35 && this.destY < eyebrowY + 15 && this.destY > eyebrowY - 15) {
+        const xRatio = Math.abs(dxFromFaceCenter) / (faceW * 0.35);
         const lift = (1 - xRatio) * (faceH * 0.035) - xRatio * (faceH * 0.01);
         targetY -= lift;
       }
       // Gentle breathe overlay
+      targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
     } else if (activeExpression === 'glitch') {
       // Electronic digital glitching (horizontal jumps and color splits)
       if (Math.random() < 0.005) {
@@ -159,7 +162,7 @@ class Particle3D {
 
     // ---- JAW SPEAK MOVEMENT ----
     if (mouthOpenScale > 0) {
-      const dxMouth = this.destX;
+      const dxMouth = dxFromFaceCenter;
       const dyMouth = this.destY - mouthY;
       if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
         if (this.destY >= mouthY) {
@@ -355,11 +358,36 @@ const Engine = {
     img.crossOrigin = "anonymous";
     img.onload = () => {
       this.loadedImage = img;
-      this.scanImage();
-      document.getElementById('loadingOverlay').classList.add('hidden');
+      
+      // Initialize tracking.js face detector
+      try {
+        const tracker = new tracking.ObjectTracker('face');
+        tracker.setInitialScale(4);
+        tracker.setStepSize(2);
+        tracker.setEdgesDensity(0.1);
+        
+        tracker.on('track', (event) => {
+          let faceRect = null;
+          if (event.data && event.data.length > 0) {
+            // Sort by area size, pick largest detected face box
+            event.data.sort((a, b) => b.width * b.height - a.width * a.height);
+            faceRect = event.data[0];
+            console.log("Detected face coordinates relative to original image:", faceRect);
+          } else {
+            console.log("No face detected, using fallback centered box.");
+          }
+          this.scanImage(faceRect);
+          document.getElementById('loadingOverlay').classList.add('hidden');
+        });
+        
+        tracking.track(img, tracker);
+      } catch (e) {
+        console.warn("Face tracking library not loaded or failed, using centered box.", e);
+        this.scanImage(null);
+        document.getElementById('loadingOverlay').classList.add('hidden');
+      }
     };
     img.onerror = () => {
-      // In case default image fails, generate a fallback circular design
       console.warn("Could not load image, building procedural face outline.");
       this.generateFallbackPattern();
       document.getElementById('loadingOverlay').classList.add('hidden');
@@ -367,8 +395,15 @@ const Engine = {
     img.src = src;
   },
 
-  scanImage() {
+  scanImage(faceRect) {
     if (!this.loadedImage) return;
+
+    // Cache faceRect on the Engine for resizing or parameter changes
+    if (faceRect !== undefined) {
+      this.cachedFaceRect = faceRect;
+    } else {
+      faceRect = this.cachedFaceRect || null;
+    }
 
     // Create a temporary thumbnail canvas to downsample pixel grid
     const tempCanvas = document.createElement('canvas');
@@ -376,9 +411,6 @@ const Engine = {
     
     // Scale image down so we read roughly the targeted number of pixels
     const aspect = this.loadedImage.width / this.loadedImage.height;
-    
-    // Calculate grid dimensions based on target particle count
-    // width * height ~ particleCount, and width/height = aspect
     const tempHeight = Math.round(Math.sqrt(this.particleCount / aspect));
     const tempWidth = Math.round(tempHeight * aspect);
     
@@ -399,8 +431,40 @@ const Engine = {
       (this.canvas.height / (window.devicePixelRatio || 1)) * 0.55 / tempHeight
     );
 
-    this.faceWidth = tempWidth * scale;
-    this.faceHeight = tempHeight * scale;
+    // Compute Face Landmarks positioning in particle coordinates
+    const partW = tempWidth * scale;
+    const partH = tempHeight * scale;
+
+    if (faceRect) {
+      // Bounding box mapping from original image space to centered particle space
+      const origW = this.loadedImage.width;
+      const origH = this.loadedImage.height;
+
+      this.faceWidth = (faceRect.width / origW) * partW;
+      this.faceHeight = (faceRect.height / origH) * partH;
+      this.faceLeft = (faceRect.x / origW - 0.5) * partW;
+      this.faceTop = (faceRect.y / origH - 0.5) * partH;
+      this.hasFaceDetected = true;
+    } else {
+      // Fallback centered bounding box
+      this.faceWidth = partW * 0.65;
+      this.faceHeight = partH * 0.65;
+      this.faceLeft = -this.faceWidth / 2;
+      this.faceTop = -this.faceHeight / 2;
+      this.hasFaceDetected = false;
+    }
+
+    // Coordinates of facial features in coordinate space:
+    this.eyeY = this.faceTop + this.faceHeight * 0.38;
+    this.leftEyeX = this.faceLeft + this.faceWidth * 0.31;
+    this.rightEyeX = this.faceLeft + this.faceWidth * 0.69;
+    this.eyeRad = this.faceWidth * 0.13;
+
+    this.eyebrowY = this.faceTop + this.faceHeight * 0.24;
+
+    this.mouthY = this.faceTop + this.faceHeight * 0.74;
+    this.mouthW = this.faceWidth * 0.28;
+    this.mouthH = this.faceHeight * 0.11;
 
     for (let y = 0; y < tempHeight; y++) {
       for (let x = 0; x < tempWidth; x++) {
@@ -422,8 +486,18 @@ const Engine = {
         const posY = (y - tempHeight / 2) * scale;
         
         // Calculate normalized distance from center (from 0 to 1) for spherical bulge
-        const normX = posX / ((tempWidth * scale) / 2 || 1);
-        const normY = posY / ((tempHeight * scale) / 2 || 1);
+        // Bulge relative to face bounding box if detected, otherwise default center
+        let normX = 0;
+        let normY = 0;
+        if (faceRect) {
+          const faceCenterX = this.faceLeft + this.faceWidth / 2;
+          const faceCenterY = this.faceTop + this.faceHeight / 2;
+          normX = (posX - faceCenterX) / (this.faceWidth / 2 || 1);
+          normY = (posY - faceCenterY) / (this.faceHeight / 2 || 1);
+        } else {
+          normX = posX / (partW / 2 || 1);
+          normY = posY / (partH / 2 || 1);
+        }
         const distSq = normX * normX + normY * normY;
         const bulge = Math.max(0, 1.0 - distSq); // dome shape
         
