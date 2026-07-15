@@ -32,8 +32,8 @@ class Particle3D {
     this.size = size;
 
     // Physics parameters
-    this.stiffness = 0.04;
-    this.friction = 0.88;
+    this.stiffness = 0.07;
+    this.friction = 0.82;
     
     // Wave / Expression phase offset
     this.phase = Math.random() * Math.PI * 2;
@@ -76,7 +76,7 @@ class Particle3D {
     // Useful derived sizes for Gaussian sigmas
     const eyeSigma = eyeRad * 1.8;        // influence zone around each eye
     const browSigma = faceW * 0.18;       // influence zone for eyebrow region
-    const mouthSigmaX = mouthW * 1.2;     // horizontal mouth influence
+    const mouthSigmaX = mouthW * 1.5;     // horizontal mouth influence
     const mouthSigmaY = mouthH * 2.5;     // vertical mouth influence (taller for jaw)
     const cheekSigma = faceW * 0.25;       // cheek puff zone
     const mouthCenterX = faceCenterX;      // mouth horizontal center
@@ -92,12 +92,12 @@ class Particle3D {
 
     } else if (activeExpression === 'smile') {
       // --- MOUTH: Corners curve upward, center stays ---
-      const mouthInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX);
-      const cornerBias = (px - mouthCenterX) / (mouthW || 1); // -1..1
-      // Corners lift more than center (parabolic curve)
-      const lift = -cornerBias * cornerBias * faceH * 0.06 * mouthInf;
-      // Slight horizontal stretch at corners
-      const stretch = cornerBias * faceW * 0.025 * mouthInf;
+      const mouthInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX * 1.3);
+      const cornerBias = Math.max(-1, Math.min(1, (px - mouthCenterX) / (mouthW || 1))); // -1..1 clamped
+      // Corners lift more than center (parabolic curve) — stronger magnitude
+      const lift = -cornerBias * cornerBias * faceH * 0.10 * mouthInf;
+      // Horizontal stretch at corners
+      const stretch = cornerBias * faceW * 0.04 * mouthInf;
       targetY += lift;
       targetX += stretch;
 
@@ -105,27 +105,27 @@ class Particle3D {
       const leftCheekX = leftEyeX;
       const rightCheekX = rightEyeX;
       const cheekY = mouthY - faceH * 0.1;
-      const leftCheek = gauss(px, py, leftCheekX, cheekY, cheekSigma);
-      const rightCheek = gauss(px, py, rightCheekX, cheekY, cheekSigma);
-      targetZ += (leftCheek + rightCheek) * 8;
+      const leftCheek = gauss(px, py, leftCheekX, cheekY, cheekSigma * 1.3);
+      const rightCheek = gauss(px, py, rightCheekX, cheekY, cheekSigma * 1.3);
+      targetZ += (leftCheek + rightCheek) * 14;
       // Cheeks push up slightly
-      targetY -= (leftCheek + rightCheek) * faceH * 0.015;
+      targetY -= (leftCheek + rightCheek) * faceH * 0.025;
 
       // --- EYES: Slight squint (lower lid pushes up) ---
       const leftEyeInf = gauss(px, py, leftEyeX, eyeY + eyeRad * 0.5, eyeSigma * 0.7);
       const rightEyeInf = gauss(px, py, rightEyeX, eyeY + eyeRad * 0.5, eyeSigma * 0.7);
-      targetY -= (leftEyeInf + rightEyeInf) * faceH * 0.012;
+      targetY -= (leftEyeInf + rightEyeInf) * faceH * 0.02;
 
       // Subtle breathing overlay
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
 
     } else if (activeExpression === 'wink') {
       // --- RIGHT EYE: Close by collapsing toward center line ---
-      const rightEyeInf = gauss(px, py, rightEyeX, eyeY, eyeSigma);
+      const rightEyeInf = gauss(px, py, rightEyeX, eyeY, eyeSigma * 1.2);
       const dyFromEye = py - eyeY;
-      // Squeeze toward eye center line (dy -> 0)
-      targetY -= dyFromEye * 0.85 * rightEyeInf;
-      targetZ -= 5 * rightEyeInf; // push lid inward
+      // Squeeze toward eye center line (dy -> 0) — strong closure
+      targetY -= dyFromEye * 0.92 * rightEyeInf;
+      targetZ -= 8 * rightEyeInf; // push lid inward
 
       // --- LEFT EYE: stays open, maybe slight raise ---
       const leftEyeInf = gauss(px, py, leftEyeX, eyeY, eyeSigma * 0.6);
@@ -137,7 +137,7 @@ class Particle3D {
 
       // --- MOUTH: Slight smirk on right side ---
       const smirkInf = gauss(px, py, mouthCenterX + mouthW * 0.4, mouthY, mouthSigmaX * 0.6);
-      targetY -= smirkInf * faceH * 0.02;
+      targetY -= smirkInf * faceH * 0.035;
 
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
 
@@ -149,24 +149,24 @@ class Particle3D {
         // Upper lip: slight upward
         targetY -= mouthInf * faceH * 0.015;
       } else {
-        // Lower jaw: drops significantly
-        targetY += mouthInf * faceH * 0.06;
+        // Lower jaw: drops significantly — big drop
+        targetY += mouthInf * faceH * 0.10;
         // Jaw comes forward in 3D
-        targetZ += mouthInf * 5;
+        targetZ += mouthInf * 8;
       }
       // Mouth narrows horizontally into an "O" shape
       const mouthDx = px - mouthCenterX;
-      targetX -= mouthDx * 0.15 * mouthInf;
+      targetX -= mouthDx * 0.25 * mouthInf;
 
       // --- EYEBROWS: Raise both high ---
       const leftBrowInf = gauss(px, py, leftEyeX, eyebrowY, browSigma);
       const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigma);
-      targetY -= (leftBrowInf + rightBrowInf) * faceH * 0.04;
+      targetY -= (leftBrowInf + rightBrowInf) * faceH * 0.07;
 
       // --- EYES: Widen (upper lid goes up) ---
       const leftEyeTop = gauss(px, py, leftEyeX, eyeY - eyeRad * 0.4, eyeSigma * 0.7);
       const rightEyeTop = gauss(px, py, rightEyeX, eyeY - eyeRad * 0.4, eyeSigma * 0.7);
-      targetY -= (leftEyeTop + rightEyeTop) * faceH * 0.015;
+      targetY -= (leftEyeTop + rightEyeTop) * faceH * 0.025;
 
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
 
@@ -174,11 +174,11 @@ class Particle3D {
       // --- EYEBROWS: Pull down and together (furrow) ---
       const leftBrowInf = gauss(px, py, leftEyeX, eyebrowY, browSigma);
       const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigma);
-      // Pull down
-      targetY += (leftBrowInf + rightBrowInf) * faceH * 0.035;
+      // Pull down — strong furrow
+      targetY += (leftBrowInf + rightBrowInf) * faceH * 0.055;
       // Pull inward (toward nose bridge)
       const browDx = px - faceCenterX;
-      targetX -= browDx * 0.08 * (leftBrowInf + rightBrowInf);
+      targetX -= browDx * 0.14 * (leftBrowInf + rightBrowInf);
 
       // --- EYES: Narrow/squint ---
       const leftEyeInf = gauss(px, py, leftEyeX, eyeY, eyeSigma * 0.8);
@@ -201,7 +201,7 @@ class Particle3D {
       // --- NOSE: Wrinkle (push forward) ---
       const noseY = (eyeY + mouthY) / 2;
       const noseInf = gauss(px, py, faceCenterX, noseY, faceW * 0.12);
-      targetZ += noseInf * 6;
+      targetZ += noseInf * 10;
 
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
 
@@ -210,7 +210,7 @@ class Particle3D {
       const mouthInf = gauss(px, py, mouthCenterX, mouthY, mouthSigmaX);
       const cornerBias = (px - mouthCenterX) / (mouthW || 1);
       // Corners pull down (opposite of smile)
-      const droop = cornerBias * cornerBias * faceH * 0.04 * mouthInf;
+      const droop = cornerBias * cornerBias * faceH * 0.07 * mouthInf;
       targetY += droop;
 
       // --- INNER EYEBROWS: Raise (puppy eyes), outer droop ---
@@ -218,19 +218,23 @@ class Particle3D {
       const rightBrowInf = gauss(px, py, rightEyeX, eyebrowY, browSigma);
       const browInnerBias = 1.0 - Math.min(1, Math.abs(px - faceCenterX) / (faceW * 0.25));
       // Inner brows go up, outer brows go down
-      targetY -= (leftBrowInf + rightBrowInf) * browInnerBias * faceH * 0.03;
-      targetY += (leftBrowInf + rightBrowInf) * (1 - browInnerBias) * faceH * 0.012;
+      targetY -= (leftBrowInf + rightBrowInf) * browInnerBias * faceH * 0.05;
+      targetY += (leftBrowInf + rightBrowInf) * (1 - browInnerBias) * faceH * 0.02;
 
       // --- EYES: Slightly narrow (about to cry) ---
       const leftEyeInf = gauss(px, py, leftEyeX, eyeY + eyeRad * 0.3, eyeSigma * 0.6);
       const rightEyeInf = gauss(px, py, rightEyeX, eyeY + eyeRad * 0.3, eyeSigma * 0.6);
-      targetY -= (leftEyeInf + rightEyeInf) * faceH * 0.008;
+      targetY -= (leftEyeInf + rightEyeInf) * faceH * 0.015;
 
       // --- CHIN: Slight tremble / push forward ---
       const chinY = mouthY + faceH * 0.12;
-      const chinInf = gauss(px, py, faceCenterX, chinY, faceW * 0.15);
-      targetZ += chinInf * 4;
-      targetY += chinInf * Math.sin(time * 8) * faceH * 0.005; // subtle tremble
+      const chinInf = gauss(px, py, faceCenterX, chinY, faceW * 0.18);
+      targetZ += chinInf * 6;
+      targetY += chinInf * Math.sin(time * 8) * faceH * 0.01; // visible tremble
+
+      // Lower lip quiver
+      const lowerLipInf = gauss(px, py, mouthCenterX, mouthY + mouthH * 0.3, mouthSigmaX * 0.5);
+      targetY += lowerLipInf * Math.sin(time * 6 + 1.5) * faceH * 0.008;
 
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
 
@@ -367,8 +371,8 @@ const Engine = {
   time: 0,
   
   // Settings & parameters
-  particleCount: 8000,
-  particleSize: 2.2,
+  particleCount: 15000,
+  particleSize: 1.8,
   depthStrength: 80,
   mouseMode: 'repel',
   colorTheme: 'original',
@@ -542,14 +546,14 @@ const Engine = {
     let cropX = 0, cropY = 0, cropW = img.width, cropH = img.height;
 
     if (detection && this.focusMode === 'face') {
-      // Crop to face region with generous padding
+      // Crop tightly to face region — more particles on the face
       const box = detection.detection.box;
-      const padX = box.width * 0.6;
-      const padY = box.height * 0.5;
+      const padX = box.width * 0.45;
+      const padY = box.height * 0.4;
       cropX = Math.max(0, Math.round(box.x - padX));
-      cropY = Math.max(0, Math.round(box.y - padY));
+      cropY = Math.max(0, Math.round(box.y - padY * 1.2)); // extra forehead
       cropW = Math.min(img.width - cropX, Math.round(box.width + padX * 2));
-      cropH = Math.min(img.height - cropY, Math.round(box.height + padY * 2));
+      cropH = Math.min(img.height - cropY, Math.round(box.height + padY * 2.4)); // extra chin
     }
 
     // Create a temporary thumbnail canvas to downsample pixel grid
@@ -573,8 +577,8 @@ const Engine = {
     
     // Compute pixel scale
     const scale = Math.min(
-      (this.canvas.width / (window.devicePixelRatio || 1)) * 0.55 / tempWidth,
-      (this.canvas.height / (window.devicePixelRatio || 1)) * 0.55 / tempHeight
+      (this.canvas.width / (window.devicePixelRatio || 1)) * 0.65 / tempWidth,
+      (this.canvas.height / (window.devicePixelRatio || 1)) * 0.65 / tempHeight
     );
 
     const partW = tempWidth * scale;
@@ -616,6 +620,11 @@ const Engine = {
       const leftEyebrow = getAvg([17, 18, 19, 20, 21]);
       const rightEyebrow = getAvg([22, 23, 24, 25, 26]);
       const mouth = getAvg([48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59]);
+      const noseTip = mapPoint(landmarks[30]);
+      const noseBridge = mapPoint(landmarks[27]);
+      const chin = mapPoint(landmarks[8]);
+      const jawLeft = mapPoint(landmarks[4]);
+      const jawRight = mapPoint(landmarks[12]);
 
       this.leftEyeX = leftEye.x;
       this.rightEyeX = rightEye.x;
@@ -630,11 +639,20 @@ const Engine = {
       const mouthTop = mapPoint(landmarks[51]).y;
       const mouthBottom = mapPoint(landmarks[57]).y;
       
-      this.mouthW = Math.max((mouthRight - mouthLeft) * 1.2, this.faceWidth * 0.15);
-      this.mouthH = Math.max((mouthBottom - mouthTop) * 1.5, this.faceHeight * 0.08);
+      this.mouthW = Math.max((mouthRight - mouthLeft) * 1.3, this.faceWidth * 0.15);
+      this.mouthH = Math.max((mouthBottom - mouthTop) * 1.8, this.faceHeight * 0.08);
+
+      // Store landmark positions for anatomical depth sculpting
+      this.noseTip = noseTip;
+      this.noseBridge = noseBridge;
+      this.chinPt = chin;
+      this.jawLeft = jawLeft;
+      this.jawRight = jawRight;
+      this.leftEyePt = leftEye;
+      this.rightEyePt = rightEye;
 
       console.log("Landmark mapping complete:", {
-        leftEye, rightEye, mouth,
+        leftEye, rightEye, mouth, noseTip,
         faceWidth: this.faceWidth, faceHeight: this.faceHeight
       });
 
@@ -656,6 +674,12 @@ const Engine = {
       this.mouthH = this.faceHeight * 0.11;
     }
 
+    // Gaussian helper for depth sculpting
+    const gaussXY = (px, py, cx, cy, sigma) => {
+      const dx = px - cx, dy = py - cy;
+      return Math.exp(-(dx*dx + dy*dy) / (2*sigma*sigma));
+    };
+
     // Build particle target positions from pixel data
     for (let y = 0; y < tempHeight; y++) {
       for (let x = 0; x < tempWidth; x++) {
@@ -675,9 +699,10 @@ const Engine = {
         
         // Spherical bulge centered on face
         let normX = 0, normY = 0;
+        let faceCX = 0, faceCY = 0;
         if (detection) {
-          const faceCX = this.faceLeft + this.faceWidth / 2;
-          const faceCY = this.faceTop + this.faceHeight / 2;
+          faceCX = this.faceLeft + this.faceWidth / 2;
+          faceCY = this.faceTop + this.faceHeight / 2;
           normX = (posX - faceCX) / (this.faceWidth / 2 || 1);
           normY = (posY - faceCY) / (this.faceHeight / 2 || 1);
         } else {
@@ -687,7 +712,40 @@ const Engine = {
         const distSq = normX * normX + normY * normY;
         const bulge = Math.max(0, 1.0 - distSq);
         
-        const posZ = ((brightness - 128) / 128) * this.depthStrength * 0.7 + (bulge * this.depthStrength * 0.8);
+        let posZ = ((brightness - 128) / 128) * this.depthStrength * 0.5 + (bulge * this.depthStrength * 0.6);
+
+        // --- ANATOMICAL DEPTH SCULPTING using 68 landmarks ---
+        if (detection && this.noseTip) {
+          const ds = this.depthStrength;
+          const fW = this.faceWidth;
+          
+          // Nose protrudes the most — strong forward push
+          const noseInf = gaussXY(posX, posY, this.noseTip.x, this.noseTip.y, fW * 0.10);
+          posZ += noseInf * ds * 0.55;
+          
+          // Nose bridge ridge
+          const bridgeInf = gaussXY(posX, posY, this.noseBridge.x, this.noseBridge.y, fW * 0.08);
+          posZ += bridgeInf * ds * 0.35;
+          
+          // Eye sockets recede (negative depth)
+          const leftEyeInf = gaussXY(posX, posY, this.leftEyePt.x, this.leftEyePt.y, fW * 0.08);
+          const rightEyeInf = gaussXY(posX, posY, this.rightEyePt.x, this.rightEyePt.y, fW * 0.08);
+          posZ -= (leftEyeInf + rightEyeInf) * ds * 0.25;
+          
+          // Forehead curves back gently
+          const foreheadY = this.eyebrowY - this.faceHeight * 0.15;
+          const foreheadInf = gaussXY(posX, posY, faceCX, foreheadY, fW * 0.30);
+          posZ -= foreheadInf * ds * 0.15;
+          
+          // Cheekbones protrude
+          const cheekLInf = gaussXY(posX, posY, this.jawLeft.x, this.leftEyePt.y + this.faceHeight * 0.1, fW * 0.12);
+          const cheekRInf = gaussXY(posX, posY, this.jawRight.x, this.rightEyePt.y + this.faceHeight * 0.1, fW * 0.12);
+          posZ += (cheekLInf + cheekRInf) * ds * 0.20;
+          
+          // Chin protrudes slightly
+          const chinInf = gaussXY(posX, posY, this.chinPt.x, this.chinPt.y, fW * 0.10);
+          posZ += chinInf * ds * 0.15;
+        }
         
         newTargets.push({ x: posX, y: posY, z: posZ, r, g, b });
       }
@@ -1155,9 +1213,12 @@ const Engine = {
     // 2. Depth sorting (Painter's Algorithm)
     this.particles.sort((a, b) => b.projZ - a.projZ);
 
-    // 3. Optimized rendering: use fillRect for speed instead of canvas paths
-    // This eliminates the per-particle beginPath/closePath/fill overhead
+    // 3. High-quality rendering with depth-based lighting
     const ctx = this.ctx;
+    
+    // Directional light for 3D shading (top-right-front)
+    const lightAngleY = 0.6;
+    const lightAngleX = 0.4;
     
     for (let i = 0; i < numParticles; i++) {
       const p = this.particles[i];
@@ -1168,14 +1229,27 @@ const Engine = {
       }
 
       const s = p.projSize;
-      const pr = Math.round(p.r);
-      const pg = Math.round(p.g);
-      const pb = Math.round(p.b);
+      
+      // Depth-based shading: particles closer (lower projZ) are brighter
+      const depthShade = Math.max(0.4, Math.min(1.0, 0.7 + (p.projZ * -0.002)));
+      
+      const pr = Math.round(Math.min(255, p.r * depthShade));
+      const pg = Math.round(Math.min(255, p.g * depthShade));
+      const pb = Math.round(Math.min(255, p.b * depthShade));
       const alpha = p.projAlpha;
 
-      // Draw as a single filled rectangle (much faster than 3 polygon faces)
+      // Draw as rounded particle with slight glow for premium feel
       ctx.fillStyle = `rgba(${pr},${pg},${pb},${alpha})`;
-      ctx.fillRect(p.screenX - s/2, p.screenY - s/2, s, s);
+      
+      if (s > 2.5) {
+        // Larger particles: draw as circles for smoother look
+        ctx.beginPath();
+        ctx.arc(p.screenX, p.screenY, s * 0.55, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Small particles: fillRect is faster
+        ctx.fillRect(p.screenX - s/2, p.screenY - s/2, s, s);
+      }
     }
 
     requestAnimationFrame(() => this.animate());
