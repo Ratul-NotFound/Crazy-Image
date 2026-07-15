@@ -338,7 +338,7 @@ body {
   gap: 8px;
 }
 
-.expr-btn {
+.expr-btn, .gesture-btn {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--glass-border);
   color: var(--text-primary);
@@ -354,12 +354,12 @@ body {
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
-.expr-btn:hover {
+.expr-btn:hover, .gesture-btn:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.2);
 }
 
-.expr-btn.active {
+.expr-btn.active, .gesture-btn.active {
   background: linear-gradient(135deg, rgba(0, 242, 254, 0.15), rgba(255, 0, 127, 0.05));
   border-color: var(--accent-cyan);
   box-shadow: 0 0 15px var(--accent-glow-cyan);

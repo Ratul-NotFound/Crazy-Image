@@ -40,7 +40,7 @@ class Particle3D {
     this.distFromCenter = Math.sqrt(x*x + y*y);
   }
 
-  update(mouse, mouseMode, mouseRadius, activeExpression, time, depthStrength, audioScale) {
+  update(mouse, mouseMode, mouseRadius, activeExpression, time, depthStrength, audioScale, mouthOpenScale) {
     let targetX = this.destX;
     let targetY = this.destY;
     let targetZ = this.destZ;
@@ -140,7 +140,6 @@ class Particle3D {
         targetY -= lift;
       }
       // Gentle breathe overlay
-      targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
     } else if (activeExpression === 'glitch') {
       // Electronic digital glitching (horizontal jumps and color splits)
       if (Math.random() < 0.005) {
@@ -156,6 +155,22 @@ class Particle3D {
       targetX = Math.cos(angle) * orbitRadius;
       targetY = Math.sin(angle) * orbitRadius;
       targetZ = this.destZ * depthFactor + Math.sin(time * 3 + this.distFromCenter * 0.02) * 15;
+    }
+
+    // ---- JAW SPEAK MOVEMENT ----
+    if (mouthOpenScale > 0) {
+      const dxMouth = this.destX;
+      const dyMouth = this.destY - mouthY;
+      if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
+        if (this.destY >= mouthY) {
+          // Lower jaw/lip goes down
+          targetY += mouthOpenScale * (faceH * 0.06);
+          targetZ += mouthOpenScale * 4; // jut jaw slightly forward
+        } else {
+          // Upper lip moves up slightly
+          targetY -= mouthOpenScale * (faceH * 0.015);
+        }
+      }
     }
 
     // Apply spring physics pulling toward active targets
@@ -219,18 +234,24 @@ class Particle3D {
   }
 
   // Calculate projected 3D to 2D screen coordinates
-  project(yaw, pitch, zoom, focalLength, width, height) {
+  project(yaw, pitch, roll, zoom, focalLength, width, height) {
+    // 3D rotation matrix around Z (roll)
+    const cosR = Math.cos(roll);
+    const sinR = Math.sin(roll);
+    let rx = this.x * cosR - this.y * sinR;
+    let ry = this.x * sinR + this.y * cosR;
+
     // 3D rotation matrix around Y (yaw)
     const cosY = Math.cos(yaw);
     const sinY = Math.sin(yaw);
-    let x1 = this.x * cosY - this.z * sinY;
-    let z1 = this.x * sinY + this.z * cosY;
+    let x1 = rx * cosY - this.z * sinY;
+    let z1 = rx * sinY + this.z * cosY;
 
     // 3D rotation matrix around X (pitch)
     const cosX = Math.cos(pitch);
     const sinX = Math.sin(pitch);
-    let y2 = this.y * cosX - z1 * sinX;
-    let z2 = this.y * sinX + z1 * cosX;
+    let y2 = ry * cosX - z1 * sinX;
+    let z2 = ry * sinX + z1 * cosX;
 
     // Perspective scale calculation
     const perspectiveScale = focalLength / (focalLength + z2);
@@ -280,11 +301,20 @@ const Engine = {
   // Camera variables
   yaw: 0,
   pitch: 0,
+  roll: 0,
   zoom: 1.1,
   targetYaw: 0,
   targetPitch: 0,
+  targetRoll: 0,
   targetZoom: 1.1,
   focalLength: 500,
+
+  // Gesture & Idle states
+  activeGesture: 'none',
+  gestureTimer: 0,
+  gestureDuration: 0,
+  mouthOpenScale: 0,
+  idleTime: 0,
 
   // Mouse tracking
   mouse: { x: null, y: null, px: null, py: null, isDragging: false },
@@ -508,6 +538,7 @@ const Engine = {
       const pos = getCanvasMousePos(e);
       this.mouse.x = pos.x;
       this.mouse.y = pos.y;
+      this.idleTime = 0; // Reset idle timer
 
       // Camera tilt parallax effect when not dragging
       if (!this.mouse.isDragging) {
@@ -531,6 +562,7 @@ const Engine = {
       this.mouse.isDragging = true;
       this.mouse.px = pos.x;
       this.mouse.py = pos.y;
+      this.idleTime = 0; // Reset idle timer
     });
 
     window.addEventListener('mouseup', () => {
@@ -543,6 +575,7 @@ const Engine = {
       // Reset tilt slowly
       this.targetYaw = 0;
       this.targetPitch = 0;
+      this.targetRoll = 0;
     });
 
     // Touch support for mobiles
@@ -550,11 +583,13 @@ const Engine = {
       const pos = getCanvasMousePos(e);
       this.mouse.x = pos.x;
       this.mouse.y = pos.y;
+      this.idleTime = 0; // Reset idle timer
     });
     canvasWrap.addEventListener('touchstart', (e) => {
       const pos = getCanvasMousePos(e);
       this.mouse.x = pos.x;
       this.mouse.y = pos.y;
+      this.idleTime = 0; // Reset idle timer
     });
     canvasWrap.addEventListener('touchend', () => {
       this.mouse.x = null;
@@ -566,6 +601,7 @@ const Engine = {
       e.preventDefault();
       this.targetZoom -= e.deltaY * 0.0008;
       this.targetZoom = Math.max(0.4, Math.min(2.5, this.targetZoom));
+      this.idleTime = 0; // Reset idle timer
     }, { passive: false });
 
     // Handle Window Resize
@@ -615,6 +651,15 @@ const Engine = {
         if (this.activeExpression === 'explode') {
           this.triggerExplosion();
         }
+      });
+    });
+
+    // 3. Avatar Gestures
+    const gestureButtons = document.querySelectorAll('.gesture-btn');
+    gestureButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const gestureName = btn.dataset.gesture;
+        this.triggerGesture(gestureName);
       });
     });
 
@@ -696,6 +741,12 @@ const Engine = {
       this.loadImage(e.target.result);
     };
     reader.readAsDataURL(file);
+  },
+
+  triggerGesture(name) {
+    this.activeGesture = name;
+    this.gestureTimer = 0;
+    this.gestureDuration = name === 'tilt' ? 2.5 : 2.0; // seconds
   },
 
   triggerExplosion() {
@@ -794,9 +845,27 @@ const Engine = {
 
     this.time += 0.01;
 
-    // Smoothly interpolate camera yaw and pitch
+    // Increment idle timer (approx 60fps delta)
+    this.idleTime += 0.016;
+
+    // Trigger slow camera looking-around movements when idle
+    if (this.idleTime > 4.0) {
+      this.targetYaw = Math.sin(this.time * 0.4) * 0.22;
+      this.targetPitch = Math.cos(this.time * 0.3) * 0.12;
+      this.targetRoll = Math.sin(this.time * 0.25) * 0.06;
+
+      // Randomly trigger standard gestures during idle (nod or tilt head)
+      if (Math.random() < 0.0015 && this.activeGesture === 'none') {
+        this.triggerGesture(Math.random() < 0.5 ? 'nod' : 'tilt');
+      }
+    } else {
+      this.targetRoll = 0; // lock roll when mouse moves
+    }
+
+    // Smoothly interpolate camera yaw, pitch, and roll
     this.yaw += (this.targetYaw - this.yaw) * 0.08;
     this.pitch += (this.targetPitch - this.pitch) * 0.08;
+    this.roll += (this.targetRoll - this.roll) * 0.08;
     this.zoom += (this.targetZoom - this.zoom) * 0.08;
 
     // Audio FFT processing
@@ -807,58 +876,87 @@ const Engine = {
         sum += this.dataArray[i];
       }
       const avg = sum / this.dataArray.length;
-      // Scale dynamic response strength
       this.audioScale = avg / 255;
     } else {
       this.audioScale = 0;
     }
 
+    // Compute active gesture offsets and mouth speaker scaling
+    let yawOffset = 0;
+    let pitchOffset = 0;
+    let rollOffset = 0;
+
+    if (this.activeGesture !== 'none') {
+      this.gestureTimer += 0.016;
+      if (this.gestureTimer >= this.gestureDuration) {
+        this.activeGesture = 'none';
+        this.mouthOpenScale = 0;
+      } else {
+        if (this.activeGesture === 'nod') {
+          pitchOffset = Math.sin(this.gestureTimer * (Math.PI * 2 / 0.65)) * 0.12;
+        } else if (this.activeGesture === 'shake') {
+          yawOffset = Math.sin(this.gestureTimer * (Math.PI * 2 / 0.65)) * 0.16;
+        } else if (this.activeGesture === 'tilt') {
+          rollOffset = Math.sin(this.gestureTimer * (Math.PI * 2 / 1.0)) * 0.1;
+        } else if (this.activeGesture === 'speak') {
+          this.mouthOpenScale = Math.abs(Math.sin(this.gestureTimer * 12)) * 0.8;
+        }
+      }
+    }
+
+    // Connect voice/sound pulse to mouth opening
+    if (this.audioReact) {
+      this.mouthOpenScale = Math.min(1.0, this.audioScale * 3.5);
+    } else if (this.activeGesture !== 'speak') {
+      this.mouthOpenScale = 0;
+    }
+
     // Update color states
     this.updateColors();
+
+    // Combined angles for projection and voxel rotations
+    const currentYaw = this.yaw + yawOffset;
+    const currentPitch = this.pitch + pitchOffset;
+    const currentRoll = this.roll + rollOffset;
 
     // 1. Physics update & Camera projection
     const numParticles = this.particles.length;
     for (let i = 0; i < numParticles; i++) {
       const p = this.particles[i];
-      p.update(this.mouse, this.mouseMode, this.mouseRadius, this.activeExpression, this.time, this.depthStrength, this.audioScale);
-      p.project(this.yaw, this.pitch, this.zoom, this.focalLength, width, height);
+      p.update(this.mouse, this.mouseMode, this.mouseRadius, this.activeExpression, this.time, this.depthStrength, this.audioScale, this.mouthOpenScale);
+      p.project(currentYaw, currentPitch, currentRoll, this.zoom, this.focalLength, width, height);
     }
 
     // 2. Depth sorting (Painter's Algorithm)
-    // Draw further particles (larger projected Z depth in screen coords) first,
-    // so closer particles draw on top of them.
     this.particles.sort((a, b) => b.projZ - a.projZ);
 
     // 3. 3D Voxel/Cube Axis Rotations & Lighting Calculations
     const size = this.particleSize;
     const d = size; // half-side size
 
-    // Cache cos/sin values for camera rotation
-    const cosY = Math.cos(this.yaw);
-    const sinY = Math.sin(this.yaw);
-    const cosX = Math.cos(this.pitch);
-    const sinX = Math.sin(this.pitch);
+    // Helper rotation function for unit axes
+    const rotate3D = (x, y, z, yaw, pitch, roll) => {
+      const cosR = Math.cos(roll);
+      const sinR = Math.sin(roll);
+      const rx = x * cosR - y * sinR;
+      const ry = x * sinR + y * cosR;
 
-    // Rotated X unit axis u = (d, 0, 0)
-    const uRot = {
-      x: d * cosY,
-      y: -d * sinY * sinX,
-      z: d * sinY * cosX
+      const cosY = Math.cos(yaw);
+      const sinY = Math.sin(yaw);
+      const x1 = rx * cosY - z * sinY;
+      const z1 = rx * sinY + z * cosY;
+
+      const cosX = Math.cos(pitch);
+      const sinX = Math.sin(pitch);
+      const y2 = ry * cosX - z1 * sinX;
+      const z2 = ry * sinX + z1 * cosX;
+      return { x: x1, y: y2, z: z2 };
     };
 
-    // Rotated Y unit axis v = (0, d, 0)
-    const vRot = {
-      x: 0,
-      y: d * cosX,
-      z: d * sinX
-    };
-
-    // Rotated Z unit axis w = (0, 0, d)
-    const wRot = {
-      x: -d * sinY,
-      y: -d * cosY * sinX,
-      z: d * cosY * cosX
-    };
+    // Rotated unit axes
+    const uRot = rotate3D(d, 0, 0, currentYaw, currentPitch, currentRoll);
+    const vRot = rotate3D(0, d, 0, currentYaw, currentPitch, currentRoll);
+    const wRot = rotate3D(0, 0, d, currentYaw, currentPitch, currentRoll);
 
     // Directional light vector pointing from top-right-front in 3D
     const Lx = 0.577;
@@ -866,8 +964,6 @@ const Engine = {
     const Lz = 0.577;
 
     // Face shading intensities: dot product of light vector with normal vectors of three faces
-    // Normals are uRot, vRot, wRot (all length d). We divide by d to normalize.
-    // Base ambient light is 0.55, diffuse is 0.45
     const intensityZ = Math.max(0.2, Math.min(1.0, 0.55 + 0.45 * (wRot.x * Lx + wRot.y * Ly + wRot.z * Lz) / d));
     const intensityX = Math.max(0.2, Math.min(1.0, 0.55 + 0.45 * (uRot.x * Lx + uRot.y * Ly + uRot.z * Lz) / d));
     const intensityY = Math.max(0.2, Math.min(1.0, 0.55 + 0.45 * (vRot.x * Lx + vRot.y * Ly + vRot.z * Lz) / d));
@@ -881,7 +977,7 @@ const Engine = {
       }
 
       // Calculate scale factor incorporating camera zoom and perspective depth
-      const scaleFactor = (p.projSize / p.size) * (1 + this.audioScale * 2.0);
+      const scaleFactor = (p.projSize / p.size);
 
       // Project the rotated half-axes to screen space
       const du = { x: uRot.x * scaleFactor, y: uRot.y * scaleFactor };
