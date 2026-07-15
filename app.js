@@ -51,16 +51,96 @@ class Particle3D {
     targetZ = this.destZ * depthFactor;
 
     // ---- APPLY LIVE EXPRESSIONS ----
+    const faceW = Engine.faceWidth || 300;
+    const faceH = Engine.faceHeight || 300;
+
+    const eyeY = -faceH * 0.12;
+    const leftEyeX = -faceW * 0.18;
+    const rightEyeX = faceW * 0.18;
+    const eyeRad = faceW * 0.09;
+
+    const eyebrowY = -faceH * 0.22;
+    const mouthY = faceH * 0.18;
+    const mouthW = faceW * 0.22;
+    const mouthH = faceH * 0.08;
+
     if (activeExpression === 'breathe') {
       // Gentle, lifelike breathing motion using sinusoidal offsets
       targetZ += Math.sin(time * 2 + this.distFromCenter * 0.015) * 10;
       targetX += Math.cos(time + this.destY * 0.01) * 3;
-    } else if (activeExpression === 'wave') {
-      // Concentric wave ripple outwards from center
-      const waveSpeed = 6;
-      const waveFreq = 0.025;
-      const waveAmp = 25;
-      targetZ += Math.sin(time * waveSpeed - this.distFromCenter * waveFreq) * waveAmp;
+    } else if (activeExpression === 'smile') {
+      // Smile: Pull corners of mouth upwards and outwards
+      const dxMouth = this.destX;
+      const dyMouth = this.destY - mouthY;
+      if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
+        const xRatio = dxMouth / mouthW; // -1 to 1
+        const lift = -Math.pow(xRatio, 2) * (faceH * 0.065); // curve up
+        const stretch = xRatio * (faceW * 0.03); // pull corners out
+        targetY += lift;
+        targetX += stretch;
+        targetZ += Math.abs(xRatio) * 6; // push cheeks out in 3D
+      }
+      // Gentle breathe overlay
+      targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
+    } else if (activeExpression === 'wink') {
+      // Wink: Close the right eye by collapsing it vertically
+      const dxEye = this.destX - rightEyeX;
+      const dyEye = this.destY - eyeY;
+      if (dxEye * dxEye + dyEye * dyEye < eyeRad * eyeRad) {
+        targetY = eyeY + dyEye * 0.12;
+        targetZ -= 4; // push eyelid back slightly
+      }
+      // Gentle breathe overlay
+      targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
+    } else if (activeExpression === 'surprise') {
+      // Surprise: Open mouth (jaw down) and raise eyebrows
+      const dxMouth = this.destX;
+      const dyMouth = this.destY - mouthY;
+      if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
+        if (this.destY < mouthY) {
+          targetY -= faceH * 0.02;
+        } else {
+          targetY += faceH * 0.07;
+        }
+        targetX *= 0.95; // narrow mouth
+      }
+      // Eyebrows up
+      if (Math.abs(this.destX) < faceW * 0.3 && this.destY < eyebrowY + 15 && this.destY > eyebrowY - 15) {
+        targetY -= faceH * 0.05;
+      }
+      // Gentle breathe overlay
+      targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
+    } else if (activeExpression === 'angry') {
+      // Angry: Pull eyebrows down and together, tighten mouth
+      if (Math.abs(this.destX) < faceW * 0.3 && this.destY < eyebrowY + 15 && this.destY > eyebrowY - 15) {
+        targetY += faceH * 0.035;
+        targetX += (this.destX > 0 ? -1 : 1) * (faceW * 0.025);
+      }
+      // Tight mouth
+      const dxMouth = this.destX;
+      const dyMouth = this.destY - mouthY;
+      if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
+        targetY = mouthY + dyMouth * 0.4;
+      }
+      // Gentle breathe overlay
+      targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
+    } else if (activeExpression === 'sad') {
+      // Sad: Pull mouth corners down, raise inner eyebrows
+      const dxMouth = this.destX;
+      const dyMouth = this.destY - mouthY;
+      if (Math.abs(dxMouth) < mouthW && Math.abs(dyMouth) < mouthH) {
+        const xRatio = dxMouth / mouthW;
+        const droop = Math.pow(xRatio, 2) * (faceH * 0.045);
+        targetY += droop;
+      }
+      // Inner eyebrows up, outer eyebrows down
+      if (Math.abs(this.destX) < faceW * 0.3 && this.destY < eyebrowY + 15 && this.destY > eyebrowY - 15) {
+        const xRatio = Math.abs(this.destX) / (faceW * 0.3);
+        const lift = (1 - xRatio) * (faceH * 0.035) - xRatio * (faceH * 0.01);
+        targetY -= lift;
+      }
+      // Gentle breathe overlay
+      targetZ += Math.sin(time * 2 + this.distFromCenter * 0.01) * 4;
     } else if (activeExpression === 'glitch') {
       // Electronic digital glitching (horizontal jumps and color splits)
       if (Math.random() < 0.005) {
@@ -289,6 +369,9 @@ const Engine = {
       (this.canvas.height / (window.devicePixelRatio || 1)) * 0.55 / tempHeight
     );
 
+    this.faceWidth = tempWidth * scale;
+    this.faceHeight = tempHeight * scale;
+
     for (let y = 0; y < tempHeight; y++) {
       for (let x = 0; x < tempWidth; x++) {
         const idx = (y * tempWidth + x) * 4;
@@ -377,6 +460,8 @@ const Engine = {
   generateFallbackPattern() {
     this.particles = [];
     const size = Math.min(this.canvas.width, this.canvas.height) / (window.devicePixelRatio || 1) * 0.3;
+    this.faceWidth = size * 2;
+    this.faceHeight = size * 2;
     
     // Generate a simple procedural mesh resembling a holographic face mask
     for (let i = 0; i < this.particleCount; i++) {
