@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neural Depth - 3D Particle Portrait Experience</title>
+  <meta name="description" content="An interactive web experience converting images into live, reactive 3D particle systems that respond to mouse movement, expressions, and sound.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Deep Space background effects -->
+  <div class="stars-bg"></div>
+  <div class="grid-bg"></div>
+  <div class="vignette"></div>
+
+  <div class="app-container">
+    <!-- Main Interactive Canvas -->
+    <main class="canvas-container">
+      <canvas id="particleCanvas"></canvas>
+      <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <p>Scanning neural depth map...</p>
+      </div>
+      <div id="instructionHint" class="instruction-hint">
+        Move mouse to tilt camera • Click & drag to rotate in 3D • Scroll to zoom
+      </div>
+    </main>
+
+    <!-- Sleek Glassmorphic Sidebar Controls -->
+    <aside class="sidebar-panel">
+      <header class="panel-header">
+        <div class="logo-area">
+          <span class="logo-dot"></span>
+          <h1>NEURAL DEPTH</h1>
+          <span class="version-tag">v3D</span>
+        </div>
+        <p class="subtitle">Interactive 3D Holographic Particle Engine</p>
+      </header>
+
+      <section class="panel-section upload-section">
+        <h2>1. SOURCE IMAGE</h2>
+        <div class="drop-zone" id="dropZone">
+          <input type="file" id="fileInput" accept="image/*" class="file-input">
+          <div class="drop-zone-content">
+            <svg class="upload-icon" viewBox="0 0 24 24" width="24" height="24">
+              <path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+            </svg>
+            <p class="drop-text-primary">Drag & Drop Image</p>
+            <p class="drop-text-secondary">or click to browse</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-section expressions-section">
+        <h2>2. LIVE EXPRESSIONS</h2>
+        <div class="btn-grid">
+          <button class="expr-btn active" data-expr="breathe">
+            <span class="btn-icon">💨</span> Breathe
+          </button>
+          <button class="expr-btn" data-expr="glitch">
+            <span class="btn-icon">⚡</span> Glitch
+          </button>
+          <button class="expr-btn" data-expr="vortex">
+            <span class="btn-icon">🌀</span> Vortex
+          </button>
+          <button class="expr-btn" data-expr="wave">
+            <span class="btn-icon">🌊</span> Wave Ripple
+          </button>
+          <button class="expr-btn" data-expr="explode">
+            <span class="btn-icon">💥</span> Shatter
+          </button>
+        </div>
+      </section>
+
+      <section class="panel-section styling-section">
+        <h2>3. COLOR STYLE</h2>
+        <div class="color-presets">
+          <button class="color-btn active" data-color="original" title="Original Colors">
+            <span class="color-preview original"></span> Original
+          </button>
+          <button class="color-btn" data-color="cyberpunk" title="Cyberpunk Cyan & Pink">
+            <span class="color-preview cyberpunk"></span> Neon Grid
+          </button>
+          <button class="color-btn" data-color="hologram" title="Hologram Aqua Blue">
+            <span class="color-preview hologram"></span> Cyber Blue
+          </button>
+          <button class="color-btn" data-color="aurora" title="Aurora Green & Gold">
+            <span class="color-preview aurora"></span> Gold Glow
+          </button>
+          <button class="color-btn" data-color="inferno" title="Inferno Red & Orange">
+            <span class="color-preview inferno"></span> Firestorm
+          </button>
+        </div>
+      </section>
+
+      <section class="panel-section physics-section">
+        <h2>4. ENGINE CONTROLS</h2>
+        
+        <div class="control-group">
+          <div class="control-label">
+            <span>Particle Count</span>
+            <span id="val-count" class="val-display">8,000</span>
+          </div>
+          <input type="range" id="param-count" min="2000" max="15000" step="500" value="8000">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Particle Size</span>
+            <span id="val-size" class="val-display">2.2px</span>
+          </div>
+          <input type="range" id="param-size" min="0.5" max="3.5" step="0.1" value="2.2">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>3D Depth Strength</span>
+            <span id="val-depth" class="val-display">80</span>
+          </div>
+          <input type="range" id="param-depth" min="10" max="200" step="5" value="80">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Interactive Mode</span>
+          </div>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="mouseMode" value="repel" checked>
+              <span>Repel</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="mouseMode" value="attract">
+              <span>Attract</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="mouseMode" value="swirl">
+              <span>Swirl</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="mouseMode" value="none">
+              <span>None</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-section audio-section">
+        <h2>5. AUDIO RESPONSE</h2>
+        <div class="audio-toggle-container">
+          <label class="switch">
+            <input type="checkbox" id="audioReactCheckbox">
+            <span class="slider round"></span>
+          </label>
+          <div class="audio-info">
+            <span class="audio-status-label">Voice / Sound Pulse</span>
+            <span class="audio-status-desc">Particles react to microphone input</span>
+          </div>
+        </div>
+      </section>
+
+      <footer class="panel-footer">
+        <p>Created with Antigravity AI Engine</p>
+      </footer>
+    </aside>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
