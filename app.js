@@ -341,12 +341,25 @@ const Engine = {
     
     try {
       console.log("Loading face-api.js models from jsDelivr/GitHub...");
-      await faceapi.nets.tinyFaceDetector.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+      const statusText = document.getElementById('status-text');
+      if (statusText) statusText.innerText = 'Loading AI Models...';
+      
+      await faceapi.nets.ssdMobilenetv1.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
       await faceapi.nets.faceLandmark68Net.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
       this.modelsLoaded = true;
       console.log("Face-api models loaded!");
+      
+      if (statusText) {
+        statusText.innerText = 'Ready';
+        statusText.style.color = '#00ffcc';
+      }
     } catch (e) {
       console.warn("Could not load face-api models", e);
+      const statusText = document.getElementById('status-text');
+      if (statusText) {
+        statusText.innerText = 'Model Load Failed';
+        statusText.style.color = '#ff4444';
+      }
     }
 
     // Load default demo portrait
@@ -365,29 +378,54 @@ const Engine = {
 
   loadImage(src) {
     document.getElementById('loadingOverlay').classList.remove('hidden');
+    const statusText = document.getElementById('status-text');
     
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    // Prevent CORS errors on data: URLs
+    if (src.startsWith('http')) {
+      img.crossOrigin = "anonymous";
+    }
+    
     img.onload = async () => {
       this.loadedImage = img;
       
       if (this.modelsLoaded && typeof faceapi !== 'undefined') {
         try {
-          // Detect face and 68 landmarks
-          const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+          if (statusText) {
+            statusText.innerText = 'Scanning Face...';
+            statusText.style.color = '#ffaa00';
+          }
+          // Detect face and 68 landmarks using SSD Mobilenet v1 for high accuracy
+          const detection = await faceapi.detectSingleFace(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.2 })).withFaceLandmarks();
           if (detection) {
             console.log("Face and 68 landmarks detected!", detection);
+            if (statusText) {
+              statusText.innerText = 'Face Detected!';
+              statusText.style.color = '#00ff00';
+            }
             this.scanImage(detection);
           } else {
             console.log("No face detected by face-api, using fallback centered box.");
+            if (statusText) {
+              statusText.innerText = 'No Face Found (Fallback)';
+              statusText.style.color = '#ff4444';
+            }
             this.scanImage(null);
           }
         } catch (e) {
           console.warn("Face-api detection failed.", e);
+          if (statusText) {
+            statusText.innerText = 'Detection Error (Fallback)';
+            statusText.style.color = '#ff4444';
+          }
           this.scanImage(null);
         }
       } else {
         console.log("Models not loaded, using fallback.");
+        if (statusText && !this.modelsLoaded) {
+          statusText.innerText = 'Models Offline (Fallback)';
+          statusText.style.color = '#ff4444';
+        }
         this.scanImage(null);
       }
       document.getElementById('loadingOverlay').classList.add('hidden');
