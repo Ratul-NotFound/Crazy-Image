@@ -677,7 +677,7 @@ const Engine = {
       const b = Math.round(200 + Math.random() * 55);
 
       this.particles.push(
-        new Particle3D(posX, posY, posZ, r, g, b, this.particleSize)
+        new Particle3D(posX, posY, posZ, r, g, b, 255, this.particleSize)
       );
     }
   },
