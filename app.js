@@ -529,6 +529,17 @@ const Engine = {
           normY = posY / (partH / 2 || 1);
         }
         const distSq = normX * normX + normY * normY;
+        
+        // Remove background: if focusMode is face, only keep pixels inside an oval boundary
+        if (detection && this.focusMode === 'face') {
+           // Slightly wider horizontal, taller vertical to include forehead and chin
+           const maskNormX = (posX - faceCX) / (this.faceWidth * 0.6);
+           const maskNormY = (posY - (faceCY - this.faceHeight * 0.1)) / (this.faceHeight * 0.7);
+           if (maskNormX * maskNormX + maskNormY * maskNormY > 1.0) {
+             continue; // Skip background pixels
+           }
+        }
+        
         const bulge = Math.max(0, 1.0 - distSq);
         
         let posZ = ((brightness - 128) / 128) * this.depthStrength * 0.5 + (bulge * this.depthStrength * 0.6);
