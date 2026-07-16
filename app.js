@@ -60,6 +60,10 @@ class Particle3D {
       targetX += warp.dx;
       targetY += warp.dy;
       targetZ += warp.dz;
+      // Store brightness warp for rendering
+      this.brightnessWarp = warp.brightness;
+    } else {
+      this.brightnessWarp = 0;
     }
 
     // Procedural ambient animations (non-anatomical)
@@ -939,15 +943,16 @@ const Engine = {
   },
 
   initDeformationGrid() {
-    this.gridCols = 15;
-    this.gridRows = 15;
-    this.grid = new Float32Array(this.gridCols * this.gridRows * 3); // dx, dy, dz
+    this.gridCols = 25;
+    this.gridRows = 25;
+    this.gridChannels = 4; // dx, dy, dz, brightness
+    this.grid = new Float32Array(this.gridCols * this.gridRows * this.gridChannels);
     
     // Bounds that cover the face plus some padding
-    this.gridStartX = this.faceLeft - this.faceWidth * 0.4;
-    this.gridStartY = this.faceTop - this.faceHeight * 0.4;
-    this.gridWidth = this.faceWidth * 1.8;
-    this.gridHeight = this.faceHeight * 1.8;
+    this.gridStartX = this.faceLeft - this.faceWidth * 0.5;
+    this.gridStartY = this.faceTop - this.faceHeight * 0.5;
+    this.gridWidth = this.faceWidth * 2.0;
+    this.gridHeight = this.faceHeight * 2.0;
     this.gridStepX = this.gridWidth / (this.gridCols - 1);
     this.gridStepY = this.gridHeight / (this.gridRows - 1);
   },
@@ -955,102 +960,251 @@ const Engine = {
   updateDeformationGrid(expression, mouthOpen, time) {
     if (!this.neutralLandmarks) return;
     
-    // 1. Create target landmarks (copy of neutral)
-    const targets = this.neutralLandmarks.map(p => ({ x: p.x, y: p.y, z: 0 }));
+    // 1. Create target landmarks (copy of neutral) with brightness channel
+    const targets = this.neutralLandmarks.map(p => ({ x: p.x, y: p.y, z: 0, b: 0 }));
     const fW = this.faceWidth;
     const fH = this.faceHeight;
     
-    // Apply expression offsets to targets (Pixel-perfect anatomical mapping)
+    // ============================================================
+    // PIXEL-PERFECT EXPRESSION OFFSETS
+    // Each landmark gets: positional shift (x,y,z) + brightness shift (b)
+    // b > 0 = brighter highlight, b < 0 = darker shadow
+    // This creates realistic light/shadow changes during expressions
+    // ============================================================
+    
     if (expression === 'smile') {
-      // 48 (left corner), 54 (right corner)
-      targets[48].y -= fH * 0.04; targets[48].x -= fW * 0.03;
-      targets[54].y -= fH * 0.04; targets[54].x += fW * 0.03;
-      // Cheeks (2, 14) push up
-      targets[2].y -= fH * 0.01; targets[14].y -= fH * 0.01;
-      // Lower eyelids (40, 41, 46, 47) squint
-      targets[40].y -= fH * 0.01; targets[41].y -= fH * 0.01;
-      targets[46].y -= fH * 0.01; targets[47].y -= fH * 0.01;
+      // --- Mouth corners pull up and outward ---
+      targets[48].y -= fH * 0.045; targets[48].x -= fW * 0.035;
+      targets[54].y -= fH * 0.045; targets[54].x += fW * 0.035;
+      // Outer mouth (49-53, 55-59) follow corners
+      targets[49].y -= fH * 0.03; targets[49].x -= fW * 0.02;
+      targets[50].y -= fH * 0.02;
+      targets[51].y -= fH * 0.015;
+      targets[52].y -= fH * 0.02;
+      targets[53].y -= fH * 0.03; targets[53].x += fW * 0.02;
+      targets[55].y -= fH * 0.01; targets[55].x += fW * 0.015;
+      targets[59].y -= fH * 0.01; targets[59].x -= fW * 0.015;
+      // Inner mouth ring (60-67)
+      targets[60].y -= fH * 0.025; targets[60].x -= fW * 0.015;
+      targets[61].y -= fH * 0.015;
+      targets[62].y -= fH * 0.015;
+      targets[63].y -= fH * 0.015;
+      targets[64].y -= fH * 0.025; targets[64].x += fW * 0.015;
+      
+      // --- Cheeks push up and out (nasolabial fold) ---
+      targets[1].y -= fH * 0.008; targets[1].x -= fW * 0.005; targets[1].b = 0.08;
+      targets[2].y -= fH * 0.015; targets[2].x -= fW * 0.008; targets[2].b = 0.12;
+      targets[3].y -= fH * 0.012; targets[3].b = 0.10;
+      targets[13].y -= fH * 0.012; targets[13].b = 0.10;
+      targets[14].y -= fH * 0.015; targets[14].x += fW * 0.008; targets[14].b = 0.12;
+      targets[15].y -= fH * 0.008; targets[15].x += fW * 0.005; targets[15].b = 0.08;
+      
+      // --- Duchenne eye squint (lower lids push up) ---
+      targets[40].y -= fH * 0.012; targets[41].y -= fH * 0.012;
+      targets[46].y -= fH * 0.012; targets[47].y -= fH * 0.012;
+      // Upper lids droop slightly from cheek push
+      targets[37].y += fH * 0.004; targets[38].y += fH * 0.004;
+      targets[43].y += fH * 0.004; targets[44].y += fH * 0.004;
+      
+      // --- Nasolabial fold shadow (nose sides darken) ---
+      targets[31].b = -0.06; // Left nostril area
+      targets[35].b = -0.06; // Right nostril area
+      // Cheek highlights
+      targets[29].b = 0.05; // Nose bridge highlight
+      
     } else if (expression === 'surprise') {
-      // Brows (17-26) raise
-      for(let i=17; i<=26; i++) targets[i].y -= fH * 0.04;
-      // Jaw (5-11) drops
-      for(let i=5; i<=11; i++) { targets[i].y += fH * 0.06; targets[i].z -= 5; }
-      // Lower lip (55-59) drops
-      for(let i=55; i<=59; i++) { targets[i].y += fH * 0.06; targets[i].z -= 5; }
-      // Upper eyelids (37,38, 43,44) widen
-      targets[37].y -= fH * 0.015; targets[38].y -= fH * 0.015;
-      targets[43].y -= fH * 0.015; targets[44].y -= fH * 0.015;
+      // --- Eyebrows raise high ---
+      for(let i = 17; i <= 21; i++) { targets[i].y -= fH * 0.055; targets[i].b = 0.06; }
+      for(let i = 22; i <= 26; i++) { targets[i].y -= fH * 0.055; targets[i].b = 0.06; }
+      // Forehead wrinkle shadows (brow area darkens between brows)
+      targets[27].y -= fH * 0.02; targets[27].b = -0.08;
+      
+      // --- Eyes widen ---
+      targets[37].y -= fH * 0.02; targets[38].y -= fH * 0.02;
+      targets[43].y -= fH * 0.02; targets[44].y -= fH * 0.02;
+      // Lower lids pull down slightly
+      targets[40].y += fH * 0.008; targets[41].y += fH * 0.008;
+      targets[46].y += fH * 0.008; targets[47].y += fH * 0.008;
+      // Eye area brightens (widened whites)
+      targets[36].b = 0.04; targets[39].b = 0.04;
+      targets[42].b = 0.04; targets[45].b = 0.04;
+      
+      // --- Jaw drops ---
+      for(let i = 5; i <= 11; i++) { targets[i].y += fH * 0.07; targets[i].z -= 6; targets[i].b = -0.04; }
+      // Chin drops
+      targets[8].y += fH * 0.08; targets[8].z -= 8; targets[8].b = -0.06;
+      
+      // --- Mouth opens (lips part) ---
+      targets[51].y -= fH * 0.015; // Upper lip holds
+      targets[57].y += fH * 0.06; targets[57].z -= 5; // Lower lip drops
+      targets[56].y += fH * 0.05; targets[58].y += fH * 0.05;
+      targets[55].y += fH * 0.04; targets[59].y += fH * 0.04;
+      // Mouth interior shadow
+      targets[62].b = -0.15; targets[66].b = -0.15;
+      targets[61].b = -0.10; targets[63].b = -0.10;
+      targets[65].b = -0.12; targets[67].b = -0.12;
+      
     } else if (expression === 'angry') {
-      // Brows pull down and in
-      targets[19].y += fH * 0.03; targets[19].x += fW * 0.02;
-      targets[20].y += fH * 0.03; targets[20].x += fW * 0.02;
-      targets[21].y += fH * 0.03; targets[21].x += fW * 0.02;
-      targets[22].y += fH * 0.03; targets[22].x -= fW * 0.02;
-      targets[23].y += fH * 0.03; targets[23].x -= fW * 0.02;
-      targets[24].y += fH * 0.03; targets[24].x -= fW * 0.02;
-      // Squint
+      // --- Brows pull down and inward (corrugator muscle) ---
+      targets[17].y += fH * 0.015; targets[17].x += fW * 0.01;
+      targets[18].y += fH * 0.02; targets[18].x += fW * 0.015;
+      targets[19].y += fH * 0.035; targets[19].x += fW * 0.025; targets[19].b = -0.10;
+      targets[20].y += fH * 0.04; targets[20].x += fW * 0.03; targets[20].b = -0.12;
+      targets[21].y += fH * 0.04; targets[21].x += fW * 0.03; targets[21].b = -0.14;
+      targets[22].y += fH * 0.04; targets[22].x -= fW * 0.03; targets[22].b = -0.14;
+      targets[23].y += fH * 0.04; targets[23].x -= fW * 0.03; targets[23].b = -0.12;
+      targets[24].y += fH * 0.035; targets[24].x -= fW * 0.025; targets[24].b = -0.10;
+      targets[25].y += fH * 0.02; targets[25].x -= fW * 0.015;
+      targets[26].y += fH * 0.015; targets[26].x -= fW * 0.01;
+      
+      // Glabella furrow shadow
+      targets[27].y += fH * 0.015; targets[27].b = -0.18;
+      targets[28].b = -0.08;
+      
+      // --- Eyes narrow (orbicularis oculi tense) ---
+      targets[37].y += fH * 0.015; targets[38].y += fH * 0.015;
+      targets[43].y += fH * 0.015; targets[44].y += fH * 0.015;
+      targets[40].y -= fH * 0.012; targets[41].y -= fH * 0.012;
+      targets[46].y -= fH * 0.012; targets[47].y -= fH * 0.012;
+      // Eye area darkens
+      targets[36].b = -0.05; targets[39].b = -0.05;
+      targets[42].b = -0.05; targets[45].b = -0.05;
+      
+      // --- Lips tighten/compress ---
+      targets[48].y += fH * 0.005; targets[48].x += fW * 0.008;
+      targets[54].y += fH * 0.005; targets[54].x -= fW * 0.008;
+      targets[51].y += fH * 0.008;
+      targets[57].y -= fH * 0.008;
+      targets[50].b = -0.04; targets[52].b = -0.04;
+      
+      // --- Nostrils flare ---
+      targets[31].x -= fW * 0.008; targets[31].b = -0.06;
+      targets[35].x += fW * 0.008; targets[35].b = -0.06;
+      
+      // --- Skin flush (cheeks redden via brightness increase) ---
+      targets[2].b = 0.06; targets[14].b = 0.06;
+      targets[3].b = 0.04; targets[13].b = 0.04;
+      
+    } else if (expression === 'sad') {
+      // --- Mouth corners droop ---
+      targets[48].y += fH * 0.035; targets[48].x += fW * 0.005; targets[48].b = -0.06;
+      targets[54].y += fH * 0.035; targets[54].x -= fW * 0.005; targets[54].b = -0.06;
+      targets[49].y += fH * 0.02; targets[53].y += fH * 0.02;
+      targets[55].y += fH * 0.01; targets[59].y += fH * 0.01;
+      // Lower lip droops
+      targets[57].y += fH * 0.01;
+      
+      // --- Inner brows raise (frontalis medialis) ---
+      targets[20].y -= fH * 0.015; targets[20].x += fW * 0.005;
+      targets[21].y -= fH * 0.03; targets[21].x += fW * 0.008; targets[21].b = 0.05;
+      targets[22].y -= fH * 0.03; targets[22].x -= fW * 0.008; targets[22].b = 0.05;
+      targets[23].y -= fH * 0.015; targets[23].x -= fW * 0.005;
+      // Outer brows droop
+      targets[17].y += fH * 0.008; targets[26].y += fH * 0.008;
+      
+      // --- Eyes droop (heavy lids) ---
       targets[37].y += fH * 0.01; targets[38].y += fH * 0.01;
       targets[43].y += fH * 0.01; targets[44].y += fH * 0.01;
-      targets[40].y -= fH * 0.01; targets[41].y -= fH * 0.01;
-      targets[46].y -= fH * 0.01; targets[47].y -= fH * 0.01;
-    } else if (expression === 'sad') {
-      // Mouth corners down
-      targets[48].y += fH * 0.03; targets[54].y += fH * 0.03;
-      // Inner brows up (21, 22)
-      targets[21].y -= fH * 0.025; targets[22].y -= fH * 0.025;
-      targets[20].y -= fH * 0.01; targets[23].y -= fH * 0.01;
+      // Under-eye shadow
+      targets[40].b = -0.08; targets[41].b = -0.08;
+      targets[46].b = -0.08; targets[47].b = -0.08;
+      
+      // --- Chin dimple (mentalis muscle) ---
+      targets[8].y += fH * 0.005; targets[8].b = -0.06;
+      targets[7].b = -0.04; targets[9].b = -0.04;
+      
+      // --- Overall face pallor (slight darkening) ---
+      targets[30].b = -0.03; // Nose tip
+      targets[29].b = -0.02;
+      
     } else if (expression === 'wink') {
-      // Right eye (42-47) closes
-      targets[43].y += fH * 0.025; targets[44].y += fH * 0.025;
-      targets[46].y -= fH * 0.015; targets[47].y -= fH * 0.015;
-      // Right cheek up
-      targets[14].y -= fH * 0.01;
+      // --- Right eye closes ---
+      targets[43].y += fH * 0.03; targets[44].y += fH * 0.03;
+      targets[46].y -= fH * 0.018; targets[47].y -= fH * 0.018;
+      targets[42].y += fH * 0.01; targets[45].y += fH * 0.01;
+      // Closed eye shadow
+      targets[43].b = -0.10; targets[44].b = -0.10;
+      targets[42].b = -0.05; targets[45].b = -0.05;
+      
+      // --- Right cheek pushes up ---
+      targets[13].y -= fH * 0.012; targets[13].b = 0.06;
+      targets[14].y -= fH * 0.015; targets[14].b = 0.08;
+      targets[15].y -= fH * 0.008; targets[15].b = 0.04;
+      
+      // --- Left eye stays open (slight squint for charm) ---
+      targets[40].y -= fH * 0.005;
+      
+      // --- Smirk (left mouth corner up) ---
+      targets[48].y -= fH * 0.02; targets[48].x -= fW * 0.01;
+      targets[49].y -= fH * 0.01;
+      targets[60].y -= fH * 0.01;
     }
     
-    // Speech (mouth open)
+    // Speech (mouth open) — moves all mouth landmarks
     if (mouthOpen > 0) {
-      for(let i=5; i<=11; i++) { targets[i].y += fH * 0.04 * mouthOpen; targets[i].z -= 3 * mouthOpen; }
-      for(let i=55; i<=59; i++) { targets[i].y += fH * 0.04 * mouthOpen; targets[i].z -= 3 * mouthOpen; }
+      // Jaw drops
+      for(let i = 5; i <= 11; i++) { 
+        targets[i].y += fH * 0.045 * mouthOpen; 
+        targets[i].z -= 4 * mouthOpen;
+        targets[i].b -= 0.03 * mouthOpen;
+      }
+      // Lower lip drops
+      for(let i = 55; i <= 59; i++) { 
+        targets[i].y += fH * 0.04 * mouthOpen; 
+        targets[i].z -= 3 * mouthOpen;
+      }
+      // Upper lip holds slightly
+      targets[50].y -= fH * 0.005 * mouthOpen;
+      targets[51].y -= fH * 0.008 * mouthOpen;
+      targets[52].y -= fH * 0.005 * mouthOpen;
+      // Mouth interior shadow
+      targets[62].b = -0.12 * mouthOpen;
+      targets[66].b = -0.12 * mouthOpen;
     }
     
-    // 2. Compute Inverse Distance Weighting (IDW) for each grid node
+    // ============================================================
+    // 2. Compute IDW for each grid node (4 channels: dx, dy, dz, brightness)
+    // ============================================================
     let idx = 0;
     for (let r = 0; r < this.gridRows; r++) {
       for (let c = 0; c < this.gridCols; c++) {
         const gx = this.gridStartX + c * this.gridStepX;
         const gy = this.gridStartY + r * this.gridStepY;
         
-        let dx = 0, dy = 0, dz = 0, wSum = 0;
+        let dx = 0, dy = 0, dz = 0, db = 0, wSum = 0;
         for (let i = 0; i < 68; i++) {
            const nl = this.neutralLandmarks[i];
            const tl = targets[i];
            const dSq = (gx - nl.x)**2 + (gy - nl.y)**2;
-           // Weight function: steep falloff (p=4) for localized anatomical precision
-           const w = 1.0 / (dSq * dSq + 0.001); 
+           // Weight function: steep falloff (p=3) for precise but smooth influence
+           const w = 1.0 / (dSq * dSq * Math.sqrt(dSq) + 0.0001); 
            dx += (tl.x - nl.x) * w;
            dy += (tl.y - nl.y) * w;
            dz += tl.z * w;
+           db += tl.b * w;
            wSum += w;
         }
         this.grid[idx++] = dx / wSum;
         this.grid[idx++] = dy / wSum;
         this.grid[idx++] = dz / wSum;
+        this.grid[idx++] = db / wSum;
       }
     }
   },
 
   sampleDeformationGrid(px, py) {
-    if (!this.grid) return { dx: 0, dy: 0, dz: 0 };
+    if (!this.grid) return { dx: 0, dy: 0, dz: 0, brightness: 0 };
     
     const xRatio = (px - this.gridStartX) / this.gridStepX;
     const yRatio = (py - this.gridStartY) / this.gridStepY;
     
     // If outside the grid, zero deformation
     if (xRatio < 0 || xRatio >= this.gridCols - 1 || yRatio < 0 || yRatio >= this.gridRows - 1) {
-      return { dx: 0, dy: 0, dz: 0 };
+      return { dx: 0, dy: 0, dz: 0, brightness: 0 };
     }
     
-    // Bilinear interpolation
+    // Bilinear interpolation across 4 channels
+    const ch = this.gridChannels;
     const c0 = Math.floor(xRatio);
     const r0 = Math.floor(yRatio);
     const c1 = c0 + 1;
@@ -1059,10 +1213,10 @@ const Engine = {
     const u = xRatio - c0;
     const v = yRatio - r0;
     
-    const i00 = (r0 * this.gridCols + c0) * 3;
-    const i10 = (r0 * this.gridCols + c1) * 3;
-    const i01 = (r1 * this.gridCols + c0) * 3;
-    const i11 = (r1 * this.gridCols + c1) * 3;
+    const i00 = (r0 * this.gridCols + c0) * ch;
+    const i10 = (r0 * this.gridCols + c1) * ch;
+    const i01 = (r1 * this.gridCols + c0) * ch;
+    const i11 = (r1 * this.gridCols + c1) * ch;
     
     const w00 = (1 - u) * (1 - v);
     const w10 = u * (1 - v);
@@ -1072,8 +1226,9 @@ const Engine = {
     const dx = this.grid[i00]*w00 + this.grid[i10]*w10 + this.grid[i01]*w01 + this.grid[i11]*w11;
     const dy = this.grid[i00+1]*w00 + this.grid[i10+1]*w10 + this.grid[i01+1]*w01 + this.grid[i11+1]*w11;
     const dz = this.grid[i00+2]*w00 + this.grid[i10+2]*w10 + this.grid[i01+2]*w01 + this.grid[i11+2]*w11;
+    const brightness = this.grid[i00+3]*w00 + this.grid[i10+3]*w10 + this.grid[i01+3]*w01 + this.grid[i11+3]*w11;
     
-    return { dx, dy, dz };
+    return { dx, dy, dz, brightness };
   },
 
   animate() {
@@ -1161,12 +1316,8 @@ const Engine = {
     // 2. Depth sorting (Painter's Algorithm)
     this.particles.sort((a, b) => b.projZ - a.projZ);
 
-    // 3. High-quality rendering with depth-based lighting
+    // 3. High-quality rendering with depth-based lighting + expression brightness
     const ctx = this.ctx;
-    
-    // Directional light for 3D shading (top-right-front)
-    const lightAngleY = 0.6;
-    const lightAngleX = 0.4;
     
     for (let i = 0; i < numParticles; i++) {
       const p = this.particles[i];
@@ -1181,21 +1332,22 @@ const Engine = {
       // Depth-based shading: particles closer (lower projZ) are brighter
       const depthShade = Math.max(0.4, Math.min(1.0, 0.7 + (p.projZ * -0.002)));
       
-      const pr = Math.round(Math.min(255, p.r * depthShade));
-      const pg = Math.round(Math.min(255, p.g * depthShade));
-      const pb = Math.round(Math.min(255, p.b * depthShade));
+      // Expression brightness warp: adds highlight (+) or shadow (-) per pixel
+      const bWarp = p.brightnessWarp || 0;
+      const brightnessMult = Math.max(0.3, Math.min(1.5, depthShade + bWarp));
+      
+      const pr = Math.round(Math.min(255, Math.max(0, p.r * brightnessMult)));
+      const pg = Math.round(Math.min(255, Math.max(0, p.g * brightnessMult)));
+      const pb = Math.round(Math.min(255, Math.max(0, p.b * brightnessMult)));
       const alpha = p.projAlpha;
 
-      // Draw as rounded particle with slight glow for premium feel
       ctx.fillStyle = `rgba(${pr},${pg},${pb},${alpha})`;
       
       if (s > 2.5) {
-        // Larger particles: draw as circles for smoother look
         ctx.beginPath();
         ctx.arc(p.screenX, p.screenY, s * 0.55, 0, Math.PI * 2);
         ctx.fill();
       } else {
-        // Small particles: fillRect is faster
         ctx.fillRect(p.screenX - s/2, p.screenY - s/2, s, s);
       }
     }
