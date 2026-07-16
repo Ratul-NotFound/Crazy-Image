@@ -408,6 +408,7 @@ const Engine = {
       this.faceHeight = (box.height / cropH) * partH;
       this.faceLeft = ((box.x - cropX) / cropW - 0.5) * partW;
       this.faceTop = ((box.y - cropY) / cropH - 0.5) * partH;
+      this.grid = null; // Force grid re-init with new face dimensions
       this.hasFaceDetected = true;
 
       // Helper to map a 68-point landmark to particle coordinates
@@ -1176,8 +1177,8 @@ const Engine = {
            const nl = this.neutralLandmarks[i];
            const tl = targets[i];
            const dSq = (gx - nl.x)**2 + (gy - nl.y)**2;
-           // Weight function: steep falloff (p=3) for precise but smooth influence
-           const w = 1.0 / (dSq * dSq * Math.sqrt(dSq) + 0.0001); 
+           // Weight function: p=2 falloff for smooth influence spread across the face
+           const w = 1.0 / (dSq * dSq + 0.01); 
            dx += (tl.x - nl.x) * w;
            dy += (tl.y - nl.y) * w;
            dz += tl.z * w;
@@ -1304,6 +1305,12 @@ const Engine = {
     const currentYaw = this.yaw + yawOffset;
     const currentPitch = this.pitch + pitchOffset;
     const currentRoll = this.roll + rollOffset;
+
+    // Update Deformation Grid (computes 68-point mesh warp for current expression)
+    if (this.hasFaceDetected) {
+      if (!this.grid) this.initDeformationGrid();
+      this.updateDeformationGrid(this.activeExpression, this.mouthOpenScale, this.time);
+    }
 
     // 1. Physics update & Camera projection
     const numParticles = this.particles.length;
