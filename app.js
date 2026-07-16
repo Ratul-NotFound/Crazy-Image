@@ -2,7 +2,7 @@
 // Antigravity AI Engine — face-api.js 68-landmark integration
 
 class Particle3D {
-  constructor(x, y, z, r, g, b, size) {
+  constructor(x, y, z, r, g, b, alpha, size) {
     // Target (resting) coordinates in 3D space
     this.destX = x;
     this.destY = y;
