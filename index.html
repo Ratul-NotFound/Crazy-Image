@@ -20,7 +20,7 @@
     <!-- Main Interactive Canvas -->
     <main class="canvas-container">
       <canvas id="particleCanvas"></canvas>
-      <div id="loadingOverlay" class="loading-overlay">
+      <div id="loadingOverlay" class="loading-overlay" style="display:none">
         <div class="spinner"></div>
         <p id="loadingText">Scanning neural depth map...</p>
       </div>
@@ -233,6 +233,6 @@
         fetch('/error', { method: 'POST', body: JSON.stringify({type: 'unhandledrejection', reason: event.reason?.toString()}) });
       });
     </script>
-    <script defer src="app.js?v=4"></script>
+    <script defer src="app.js?v=5"></script>
 </body>
 </html>

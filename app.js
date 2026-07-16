@@ -295,7 +295,8 @@ const Engine = {
   },
 
   loadImage(src) {
-    document.getElementById('loadingOverlay').classList.remove('hidden');
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.style.display = 'flex';
     const loadingText = document.getElementById('loadingText');
     
     const img = new Image();
@@ -336,15 +337,22 @@ const Engine = {
         this.setStatus('Models Not Ready', '#ff4444');
       }
       
-      this.scanImage();
-      document.getElementById('loadingOverlay').classList.add('hidden');
+      try {
+        this.scanImage();
+      } catch(e) {
+        console.error('scanImage error:', e);
+      }
+      // ALWAYS hide the loading overlay, no matter what happened
+      const overlay = document.getElementById('loadingOverlay');
+      if (overlay) overlay.style.display = 'none';
       if (loadingText) loadingText.textContent = 'Scanning neural depth map...';
     };
     
     img.onerror = () => {
       console.warn("Could not load image, building procedural face outline.");
       this.generateFallbackPattern();
-      document.getElementById('loadingOverlay').classList.add('hidden');
+      const overlay = document.getElementById('loadingOverlay');
+      if (overlay) overlay.style.display = 'none';
     };
     
     img.src = src;
