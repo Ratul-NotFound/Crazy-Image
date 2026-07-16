@@ -391,37 +391,59 @@ const Engine = {
     // Create soft alpha mask using face landmarks if available
     if (detection && this.focusMode === 'face') {
       const landmarks = detection.landmarks.positions;
-      // Map original image landmarks to tempCanvas coordinates
       const maskPts = landmarks.map(p => ({
         x: ((p.x - cropX) / cropW) * tempWidth,
         y: ((p.y - cropY) / cropH) * tempHeight
       }));
       
-      tempCtx.globalCompositeOperation = 'destination-in';
-      tempCtx.filter = 'blur(15px)'; // Soft organic feathered edge
-      tempCtx.beginPath();
+      // Step 1: Draw the face shape onto a separate mask canvas
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = tempWidth;
+      maskCanvas.height = tempHeight;
+      const maskCtx = maskCanvas.getContext('2d');
       
-      // Start at left jaw (0), go to right jaw (16)
-      tempCtx.moveTo(maskPts[0].x, maskPts[0].y);
-      for(let i = 1; i <= 16; i++) {
-        tempCtx.lineTo(maskPts[i].x, maskPts[i].y);
+      const foreheadHeight = (maskPts[8].y - maskPts[27].y) * 0.75;
+      
+      maskCtx.beginPath();
+      maskCtx.moveTo(maskPts[0].x, maskPts[0].y);
+      for (let i = 1; i <= 16; i++) {
+        maskCtx.lineTo(maskPts[i].x, maskPts[i].y);
       }
-      
-      // Arc over the forehead
-      // Use eyebrow points (26 right, 17 left) and push them up
-      const foreheadHeight = (maskPts[8].y - maskPts[27].y) * 0.75; // chin to nosebridge distance * 0.75
-      tempCtx.bezierCurveTo(
+      // Close path over forehead using eyebrow points
+      maskCtx.bezierCurveTo(
         maskPts[26].x, maskPts[26].y - foreheadHeight,
         maskPts[17].x, maskPts[17].y - foreheadHeight,
         maskPts[0].x, maskPts[0].y
       );
+      maskCtx.fillStyle = 'white';
+      maskCtx.fill();
       
-      tempCtx.fillStyle = 'white';
-      tempCtx.fill();
+      // Step 2: Blur the mask by drawing it repeatedly with low opacity (box-blur approximation)
+      const blurCanvas = document.createElement('canvas');
+      blurCanvas.width = tempWidth;
+      blurCanvas.height = tempHeight;
+      const blurCtx = blurCanvas.getContext('2d');
+      blurCtx.globalAlpha = 0.25;
+      const offsets = [-8, -4, 0, 4, 8];
+      for (const dx of offsets) {
+        for (const dy of offsets) {
+          blurCtx.drawImage(maskCanvas, dx, dy);
+        }
+      }
+      blurCtx.globalAlpha = 1.0;
       
-      // Reset context
-      tempCtx.filter = 'none';
-      tempCtx.globalCompositeOperation = 'source-over';
+      // Step 3: Apply blurred mask to tempCanvas using destination-in on a fresh canvas
+      const resultCanvas = document.createElement('canvas');
+      resultCanvas.width = tempWidth;
+      resultCanvas.height = tempHeight;
+      const resultCtx = resultCanvas.getContext('2d');
+      resultCtx.drawImage(tempCanvas, 0, 0);
+      resultCtx.globalCompositeOperation = 'destination-in';
+      resultCtx.drawImage(blurCanvas, 0, 0);
+      
+      // Step 4: Replace tempCanvas content with masked result
+      tempCtx.clearRect(0, 0, tempWidth, tempHeight);
+      tempCtx.drawImage(resultCanvas, 0, 0);
     }
     
     const imgData = tempCtx.getImageData(0, 0, tempWidth, tempHeight);
