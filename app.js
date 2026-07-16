@@ -396,63 +396,7 @@ const Engine = {
     // Draw cropped region onto thumbnail canvas
     tempCtx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, tempWidth, tempHeight);
     
-    // Create soft alpha mask using face landmarks if available
-    if (detection && this.focusMode === 'face') {
-      const landmarks = detection.landmarks.positions;
-      const maskPts = landmarks.map(p => ({
-        x: ((p.x - cropX) / cropW) * tempWidth,
-        y: ((p.y - cropY) / cropH) * tempHeight
-      }));
-      
-      // Step 1: Draw the face shape onto a separate mask canvas
-      const maskCanvas = document.createElement('canvas');
-      maskCanvas.width = tempWidth;
-      maskCanvas.height = tempHeight;
-      const maskCtx = maskCanvas.getContext('2d');
-      
-      const foreheadHeight = (maskPts[8].y - maskPts[27].y) * 0.75;
-      
-      maskCtx.beginPath();
-      maskCtx.moveTo(maskPts[0].x, maskPts[0].y);
-      for (let i = 1; i <= 16; i++) {
-        maskCtx.lineTo(maskPts[i].x, maskPts[i].y);
-      }
-      // Close path over forehead using eyebrow points
-      maskCtx.bezierCurveTo(
-        maskPts[26].x, maskPts[26].y - foreheadHeight,
-        maskPts[17].x, maskPts[17].y - foreheadHeight,
-        maskPts[0].x, maskPts[0].y
-      );
-      maskCtx.fillStyle = 'white';
-      maskCtx.fill();
-      
-      // Step 2: Blur the mask by drawing it repeatedly with low opacity (box-blur approximation)
-      const blurCanvas = document.createElement('canvas');
-      blurCanvas.width = tempWidth;
-      blurCanvas.height = tempHeight;
-      const blurCtx = blurCanvas.getContext('2d');
-      blurCtx.globalAlpha = 0.25;
-      const offsets = [-8, -4, 0, 4, 8];
-      for (const dx of offsets) {
-        for (const dy of offsets) {
-          blurCtx.drawImage(maskCanvas, dx, dy);
-        }
-      }
-      blurCtx.globalAlpha = 1.0;
-      
-      // Step 3: Apply blurred mask to tempCanvas using destination-in on a fresh canvas
-      const resultCanvas = document.createElement('canvas');
-      resultCanvas.width = tempWidth;
-      resultCanvas.height = tempHeight;
-      const resultCtx = resultCanvas.getContext('2d');
-      resultCtx.drawImage(tempCanvas, 0, 0);
-      resultCtx.globalCompositeOperation = 'destination-in';
-      resultCtx.drawImage(blurCanvas, 0, 0);
-      
-      // Step 4: Replace tempCanvas content with masked result
-      tempCtx.clearRect(0, 0, tempWidth, tempHeight);
-      tempCtx.drawImage(resultCanvas, 0, 0);
-    }
+    // (face masking is done per-pixel in the loop below using soft ellipse)
     
     const imgData = tempCtx.getImageData(0, 0, tempWidth, tempHeight);
     const data = imgData.data;
@@ -570,11 +514,23 @@ const Engine = {
     for (let y = 0; y < tempHeight; y++) {
       for (let x = 0; x < tempWidth; x++) {
         const idx = (y * tempWidth + x) * 4;
-        const alpha = data[idx + 3];
+        // Compute per-pixel soft face mask alpha
+        let pixelAlpha = data[idx + 3]; // raw canvas alpha (255 for normal images)
         
-        if (alpha < 15) continue; // Allow soft fading particles
-
+        if (detection && this.focusMode === 'face') {
+          // Map pixel to normalized face-oval coordinates
+          const pxNorm = (x / tempWidth - 0.5) * 2; // -1..1 across width
+          const pyNorm = (y / tempHeight - 0.5) * 2; // -1..1 across height
+          // Ellipse: wider horizontally (1.0), taller vertically (0.85) 
+          const ellipseDist = Math.sqrt(pxNorm * pxNorm + (pyNorm / 0.85) * (pyNorm / 0.85));
+          // Soft fade: 1.0 inside, smooth falloff 0.75..1.0, 0 outside 1.05
+          const fade = 1.0 - Math.max(0, Math.min(1, (ellipseDist - 0.75) / 0.30));
+          // Apply smoothstep for organic look
+          const smooth = fade * fade * (3 - 2 * fade);
+          pixelAlpha = Math.round(pixelAlpha * smooth);
+        }
         
+        if (pixelAlpha < 8) continue;
         const r = data[idx];
         const g = data[idx + 1];
         const b = data[idx + 2];
@@ -634,7 +590,7 @@ const Engine = {
           posZ += chinInf * ds * 0.15;
         }
         
-        newTargets.push({ x: posX, y: posY, z: posZ, r, g, b, a: alpha });
+        newTargets.push({ x: posX, y: posY, z: posZ, r, g, b, a: pixelAlpha });
       }
     }
 
