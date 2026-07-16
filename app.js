@@ -18,10 +18,11 @@ class Particle3D {
     this.vy = 0;
     this.vz = 0;
 
-    // Original Pixel Color
+    // Original Pixel Color & Alpha
     this.origR = r;
     this.origG = g;
     this.origB = b;
+    this.origAlpha = alpha / 255;
 
     // Active color (interpolated during color preset transitions)
     this.r = r;
@@ -169,7 +170,7 @@ class Particle3D {
     const fogStart = -200;
     const fogEnd = 300;
     let alpha = 1 - (z2 - fogStart) / (fogEnd - fogStart);
-    this.projAlpha = Math.max(0.15, Math.min(1, alpha));
+    this.projAlpha = Math.max(0.15, Math.min(1, alpha)) * this.origAlpha;
   }
 
   lerpColor(r, g, b, speed) {
@@ -387,6 +388,42 @@ const Engine = {
     // Draw cropped region onto thumbnail canvas
     tempCtx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, tempWidth, tempHeight);
     
+    // Create soft alpha mask using face landmarks if available
+    if (detection && this.focusMode === 'face') {
+      const landmarks = detection.landmarks.positions;
+      // Map original image landmarks to tempCanvas coordinates
+      const maskPts = landmarks.map(p => ({
+        x: ((p.x - cropX) / cropW) * tempWidth,
+        y: ((p.y - cropY) / cropH) * tempHeight
+      }));
+      
+      tempCtx.globalCompositeOperation = 'destination-in';
+      tempCtx.filter = 'blur(15px)'; // Soft organic feathered edge
+      tempCtx.beginPath();
+      
+      // Start at left jaw (0), go to right jaw (16)
+      tempCtx.moveTo(maskPts[0].x, maskPts[0].y);
+      for(let i = 1; i <= 16; i++) {
+        tempCtx.lineTo(maskPts[i].x, maskPts[i].y);
+      }
+      
+      // Arc over the forehead
+      // Use eyebrow points (26 right, 17 left) and push them up
+      const foreheadHeight = (maskPts[8].y - maskPts[27].y) * 0.75; // chin to nosebridge distance * 0.75
+      tempCtx.bezierCurveTo(
+        maskPts[26].x, maskPts[26].y - foreheadHeight,
+        maskPts[17].x, maskPts[17].y - foreheadHeight,
+        maskPts[0].x, maskPts[0].y
+      );
+      
+      tempCtx.fillStyle = 'white';
+      tempCtx.fill();
+      
+      // Reset context
+      tempCtx.filter = 'none';
+      tempCtx.globalCompositeOperation = 'source-over';
+    }
+    
     const imgData = tempCtx.getImageData(0, 0, tempWidth, tempHeight);
     const data = imgData.data;
     
@@ -505,7 +542,8 @@ const Engine = {
         const idx = (y * tempWidth + x) * 4;
         const alpha = data[idx + 3];
         
-        if (alpha < 50) continue;
+        if (alpha < 15) continue; // Allow soft fading particles
+
         
         const r = data[idx];
         const g = data[idx + 1];
@@ -529,17 +567,6 @@ const Engine = {
           normY = posY / (partH / 2 || 1);
         }
         const distSq = normX * normX + normY * normY;
-        
-        // Remove background: if focusMode is face, only keep pixels inside an oval boundary
-        if (detection && this.focusMode === 'face') {
-           // Slightly wider horizontal, taller vertical to include forehead and chin
-           const maskNormX = (posX - faceCX) / (this.faceWidth * 0.6);
-           const maskNormY = (posY - (faceCY - this.faceHeight * 0.1)) / (this.faceHeight * 0.7);
-           if (maskNormX * maskNormX + maskNormY * maskNormY > 1.0) {
-             continue; // Skip background pixels
-           }
-        }
-        
         const bulge = Math.max(0, 1.0 - distSq);
         
         let posZ = ((brightness - 128) / 128) * this.depthStrength * 0.5 + (bulge * this.depthStrength * 0.6);
@@ -577,7 +604,7 @@ const Engine = {
           posZ += chinInf * ds * 0.15;
         }
         
-        newTargets.push({ x: posX, y: posY, z: posZ, r, g, b });
+        newTargets.push({ x: posX, y: posY, z: posZ, r, g, b, a: alpha });
       }
     }
 
@@ -599,6 +626,7 @@ const Engine = {
       p.origR = newTargets[i].r;
       p.origG = newTargets[i].g;
       p.origB = newTargets[i].b;
+      p.origAlpha = newTargets[i].a / 255;
       p.distFromCenter = Math.sqrt(p.destX * p.destX + p.destY * p.destY);
     }
 
@@ -616,7 +644,7 @@ const Engine = {
           startZ = parent.z;
         }
 
-        const p = new Particle3D(t.x, t.y, t.z, t.r, t.g, t.b, this.particleSize);
+        const p = new Particle3D(t.x, t.y, t.z, t.r, t.g, t.b, t.a, this.particleSize);
         p.x = startX;
         p.y = startY;
         p.z = startZ;
